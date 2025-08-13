@@ -1,14 +1,16 @@
-
 <!doctype html>
 <html>
   <head><meta charset="utf-8"/><title>Trading Simulator</title></head>
   <body style="font-family: system-ui; padding: 20px;">
     <h1>Trading Simulator</h1>
-    <div>
-      <label>User ID: <input id="uid" value="1"></label>
+
+    <div style="margin-bottom: 12px;">
+      <label>User ID: <input id="uid" value="1" style="width:80px"></label>
       <button id="refresh">Refresh Performance</button>
     </div>
-    <canvas id="chart" width="900" height="400"></canvas>
+
+    <canvas id="chart" width="900" height="380" style="border:1px solid #ddd"></canvas>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
       async function loadPerformance() {
@@ -21,11 +23,111 @@
         if (window.eqChart) window.eqChart.destroy();
         window.eqChart = new Chart(ctx, {
           type: 'line',
-          data: { labels, datasets: [{ label: 'Equity', data: values }]},
+          data: { labels, datasets: [{ label: 'Equity', data: values, fill: false }]},
           options: { responsive: false }
         });
       }
       document.getElementById('refresh').onclick = loadPerformance;
+    </script>
+
+    <h2 style="margin-top:28px;">Buy / Sell Stocks</h2>
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+      <label>Ticker: <input id="ticker" placeholder="AAPL" style="width:100px"></label>
+      <label>Quantity: <input id="qty" type="number" value="1" min="1" style="width:90px"></label>
+      <label>Price (optional): <input id="price" type="number" step="0.01" placeholder="market" style="width:110px"></label>
+      <select id="side">
+        <option value="BUY">BUY</option>
+        <option value="SELL">SELL</option>
+      </select>
+      <button id="submitTrade">Submit Trade</button>
+      <small>Tip: run price ingestion first: POST /api/prices/&lt;TICKER&gt;</small>
+    </div>
+
+    <div id="tradeMsg" style="color:#008000; margin-bottom:18px;"></div>
+
+    <h2>Current Stocks Owned</h2>
+    <div style="margin-bottom:10px;">
+      <label>Date (as of): <input id="asof" type="date"></label>
+      <button id="refreshPositions">Refresh Positions</button>
+    </div>
+
+    <table id="positionsTable" border="1" cellpadding="6" style="border-collapse:collapse; min-width:720px;">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Quantity</th>
+          <th>Avg Cost</th>
+          <th>Last Price</th>
+          <th>Market Value</th>
+          <th>Unrealized P/L</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      async function submitTrade() {
+        const uid = document.getElementById('uid').value;
+        const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+        const qty = parseInt(document.getElementById('qty').value || "0", 10);
+        const side = document.getElementById('side').value;
+        const priceStr = document.getElementById('price').value;
+        const price = priceStr ? parseFloat(priceStr) : null;
+
+        if (!uid || !ticker || qty <= 0) {
+          alert("Enter user id, ticker, and positive quantity.");
+          return;
+        }
+        try {
+          const res = await fetch('/api/trades', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ user_id: Number(uid), ticker, side, quantity: qty, price })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            document.getElementById('tradeMsg').textContent =
+              `${side} ${qty} ${ticker} @ ${data.price} ✓`;
+            document.getElementById('price').value = '';
+            await loadPerformance();
+            await loadPositions();
+          } else {
+            document.getElementById('tradeMsg').style.color = '#b00020';
+            document.getElementById('tradeMsg').textContent = data.error || JSON.stringify(data);
+          }
+        } catch (e) {
+          document.getElementById('tradeMsg').style.color = '#b00020';
+          document.getElementById('tradeMsg').textContent = String(e);
+        }
+      }
+
+      async function loadPositions() {
+        const uid = document.getElementById('uid').value;
+        const asofInput = document.getElementById('asof').value;
+        const qs = new URLSearchParams({ user_id: uid });
+        if (asofInput) qs.set('date', asofInput);
+        const res = await fetch('/api/positions?' + qs.toString());
+        const data = await res.json();
+        const tbody = document.querySelector('#positionsTable tbody');
+        tbody.innerHTML = '';
+        (data.positions || []).forEach(p => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${p.ticker}</td>
+                          <td>${p.quantity}</td>
+                          <td>${p.avg_cost}</td>
+                          <td>${p.last_price}</td>
+                          <td>${p.market_value}</td>
+                          <td>${p.unrealized_pl}</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+
+      document.getElementById('submitTrade').onclick = submitTrade;
+      document.getElementById('refreshPositions').onclick = loadPositions;
+
+      // auto-load on first visit
+      loadPerformance();
+      loadPositions();
     </script>
   </body>
 </html>

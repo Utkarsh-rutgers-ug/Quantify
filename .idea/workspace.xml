@@ -5,24 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="80c36f99-804f-4f0d-a576-46def302e559" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/LICENSE" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Procfile" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/algorithmic_trading/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/algorithmic_trading/static/index.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/runtime.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/wsgi.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Quantify" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/algorithmic_trading/alpha_vantage_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/algorithmic_trading/alpha_vantage_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/algorithmic_trading/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/algorithmic_trading/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/algorithmic_trading/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/algorithmic_trading/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/algorithmic_trading/routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/algorithmic_trading/routes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/algorithmic_trading/services.py" beforeDir="false" afterPath="$PROJECT_DIR$/algorithmic_trading/services.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/algorithmic_trading/static/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/algorithmic_trading/static/index.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -117,7 +101,7 @@
       <workItem from="1750379986731" duration="609000" />
       <workItem from="1751379141747" duration="621000" />
       <workItem from="1751689446849" duration="632000" />
-      <workItem from="1755054020326" duration="4858000" />
+      <workItem from="1755054020326" duration="6882000" />
     </task>
     <servers />
   </component>
