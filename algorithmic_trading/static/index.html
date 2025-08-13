@@ -1,0 +1,31 @@
+
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"/><title>Trading Simulator</title></head>
+  <body style="font-family: system-ui; padding: 20px;">
+    <h1>Trading Simulator</h1>
+    <div>
+      <label>User ID: <input id="uid" value="1"></label>
+      <button id="refresh">Refresh Performance</button>
+    </div>
+    <canvas id="chart" width="900" height="400"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      async function loadPerformance() {
+        const uid = document.getElementById('uid').value;
+        const res = await fetch(`/api/performance?user_id=${uid}`);
+        const data = await res.json();
+        const labels = data.curve.map(p => p.date);
+        const values = data.curve.map(p => p.equity);
+        const ctx = document.getElementById('chart').getContext('2d');
+        if (window.eqChart) window.eqChart.destroy();
+        window.eqChart = new Chart(ctx, {
+          type: 'line',
+          data: { labels, datasets: [{ label: 'Equity', data: values }]},
+          options: { responsive: false }
+        });
+      }
+      document.getElementById('refresh').onclick = loadPerformance;
+    </script>
+  </body>
+</html>

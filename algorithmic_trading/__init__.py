@@ -1,27 +1,28 @@
+
 import os
 from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
-from models import db
-from routes import api_bp
+
+db = SQLAlchemy()
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-    # Config (override via env on AWS)
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///trading.db")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["ALPHA_VANTAGE_API_KEY"] = os.getenv("ALPHA_VANTAGE_API_KEY", "")
 
-    db.init_app(app)
+    from .models import db as _db
+    _db.init_app(app)
+
+    from .routes import api_bp
     app.register_blueprint(api_bp, url_prefix="/api")
 
     @app.route("/")
     def index():
-        return send_from_directory("static", "index.html")
+        return send_from_directory(app.static_folder, "index.html")
 
     with app.app_context():
-        db.create_all()
+        _db.create_all()
 
     return app
-
-app = create_app()
