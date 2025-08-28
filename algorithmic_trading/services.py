@@ -2,8 +2,8 @@ from datetime import datetime, date
 from typing import List, Dict
 import pandas as pd
 from flask import current_app
-from models import db, Trade, HistoricalPrice
-from alpha_vantage_api import get_historical_data
+from .models import db, Trade, HistoricalPrice
+from .alpha_vantage_api import get_historical_data
 
 def upsert_prices(ticker: str, df: pd.DataFrame) -> int:
     inserted = 0
