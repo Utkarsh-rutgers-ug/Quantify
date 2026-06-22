@@ -1,13 +1,10 @@
 import os
-import sys
-
-APP_DIR = os.path.join(os.path.dirname(__file__), "algorithmic_trading")
-sys.path.insert(0, APP_DIR)
 
 from app import app
 from quote_sampler import start_quote_sampler
 
 if __name__ == "__main__":
+    # Disable Flask's reloader so it cannot start two background samplers.
     start_quote_sampler(app)
     port = int(os.getenv("APP_PORT", "5001"))
     app.run(debug=True, use_reloader=False, port=port)
