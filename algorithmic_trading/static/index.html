@@ -1,133 +1,808 @@
-<!doctype html>
-<html>
-  <head><meta charset="utf-8"/><title>Trading Simulator</title></head>
-  <body style="font-family: system-ui; padding: 20px;">
-    <h1>Trading Simulator</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quantify — Paper Trading Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E11;
+    --panel:#12161C;
+    --panel-2:#171C24;
+    --line:#232A35;
+    --text:#F4F6F8;
+    --muted:#7A8699;
+    --muted-2:#566077;
+    --green:#1FCB7A;
+    --green-dim:#16513A;
+    --red:#E5484D;
+    --red-dim:#5A2226;
+    --amber:#E8B339;
+    --amber-dim:#5A4318;
+    --radius:10px;
+    --mono:'JetBrains Mono', monospace;
+    --sans:'Inter', system-ui, sans-serif;
+  }
 
-    <div style="margin-bottom: 12px;">
-      <label>User ID: <input id="uid" value="1" style="width:80px"></label>
-      <button id="refresh">Refresh Performance</button>
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); }
+  body{ font-size:14px; line-height:1.5; }
+
+  .app{ max-width:1280px; margin:0 auto; padding:20px 24px 60px; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-bottom:18px; border-bottom:1px solid var(--line); margin-bottom:20px;
+    flex-wrap:wrap; gap:14px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{ font-family:var(--mono); font-weight:700; font-size:18px; letter-spacing:-0.02em; }
+  .brand .mark .dot{ color:var(--green); }
+  .brand .sub{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:0.08em; }
+
+  .user-switch{ display:flex; align-items:center; gap:8px; }
+  .user-switch select, .user-switch input{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:7px 10px; font-family:var(--sans); font-size:13px;
+  }
+  .btn{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:7px 14px; font-size:13px; font-weight:500;
+    cursor:pointer; transition:background .15s, border-color .15s;
+    font-family:var(--sans);
+  }
+  .btn:hover{ background:#1C222B; border-color:var(--muted-2); }
+  .btn-primary{ background:var(--green); border-color:var(--green); color:#06140D; font-weight:600; }
+  .btn-primary:hover{ background:#28DE8A; }
+  .btn-sell{ background:var(--red); border-color:var(--red); color:#1A0506; font-weight:600; }
+  .btn-sell:hover{ background:#F25A5F; }
+  .btn-small{ padding:5px 10px; font-size:12px; }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* ---------- Account strip ---------- */
+  .account-strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:var(--radius);
+    overflow:hidden; margin-bottom:24px;
+  }
+  .acc-cell{ background:var(--panel); padding:16px 20px; }
+  .acc-cell .label{ color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:6px; }
+  .acc-cell .value{ font-family:var(--mono); font-size:22px; font-weight:600; letter-spacing:-0.01em; }
+  .acc-cell .delta{ font-family:var(--mono); font-size:12px; margin-top:4px; }
+  .up{ color:var(--green); } .down{ color:var(--red); } .flat{ color:var(--muted); }
+  .symbol-search{
+    display:flex; gap:10px; align-items:center; margin-bottom:18px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 14px;
+  }
+  .symbol-search input{
+    flex:1; min-width:0; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--text); border-radius:7px; padding:9px 11px; font-family:var(--mono);
+    text-transform:uppercase;
+  }
+  .symbol-search .quote-read{ margin-left:auto; font-family:var(--mono); color:var(--muted); }
+
+  /* ---------- Layout grid ---------- */
+  .grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:18px; }
+  @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    margin-bottom:18px; overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 18px; border-bottom:1px solid var(--line);
+  }
+  .panel-head h2{ font-size:13px; font-weight:600; margin:0; text-transform:uppercase; letter-spacing:0.06em; color:var(--text); }
+  .panel-head .hint{ color:var(--muted-2); font-size:12px; font-family:var(--mono); }
+  .panel-body{ padding:18px; }
+  .panel-body.flush{ padding:0; }
+
+  /* ---------- Tables ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ text-align:left; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase;
+      letter-spacing:0.05em; padding:10px 18px; border-bottom:1px solid var(--line); }
+  td{ padding:11px 18px; border-bottom:1px solid var(--line); font-family:var(--mono); }
+  tr:last-child td{ border-bottom:none; }
+  td.right, th.right{ text-align:right; }
+  td.ticker{ font-family:var(--mono); font-weight:600; }
+  .empty-row td{ color:var(--muted-2); font-family:var(--sans); text-align:center; padding:24px; font-style:italic; }
+
+  .pill{
+    display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px;
+    font-weight:600; font-family:var(--mono); letter-spacing:0.03em;
+  }
+  .pill-buy{ background:var(--green-dim); color:var(--green); }
+  .pill-sell{ background:var(--red-dim); color:var(--red); }
+  .pill-low{ background:var(--green-dim); color:var(--green); }
+  .pill-medium{ background:var(--amber-dim); color:var(--amber); }
+  .pill-high{ background:var(--red-dim); color:var(--red); }
+  .pill-hold{ background:#252B35; color:var(--muted); }
+
+  /* ---------- Trade ticket ---------- */
+  .ticket-row{ display:flex; gap:10px; margin-bottom:12px; }
+  .field{ flex:1; display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .field input, .field select{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:9px 11px; font-family:var(--mono); font-size:13px;
+  }
+  .field input:focus, .field select:focus{ outline:none; border-color:var(--muted-2); }
+  .side-toggle{ display:flex; gap:8px; }
+  .side-toggle button{
+    flex:1; padding:9px; border-radius:7px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--muted); font-family:var(--mono); font-weight:600; font-size:13px; cursor:pointer;
+  }
+  .side-toggle button.active.buy{ background:var(--green-dim); color:var(--green); border-color:var(--green); }
+  .side-toggle button.active.sell{ background:var(--red-dim); color:var(--red); border-color:var(--red); }
+  .ticket-summary{ font-family:var(--mono); font-size:12px; color:var(--muted); margin:10px 0 14px; min-height:18px; }
+  .ticket-error{ color:var(--red); font-size:12px; font-family:var(--mono); margin-top:8px; min-height:16px; }
+  .ticket-ok{ color:var(--green); font-size:12px; font-family:var(--mono); margin-top:8px; min-height:16px; }
+
+  /* ---------- Chart ---------- */
+  .chart-wrap{ padding:18px; }
+  svg.chart{ width:100%; height:220px; display:block; }
+  .chart-axis-label{ font-family:var(--mono); font-size:10px; fill:var(--muted-2); }
+  .chart-controls{ display:flex; gap:6px; flex-wrap:wrap; }
+  .range-btn{
+    border:1px solid var(--line); background:var(--panel-2); color:var(--muted);
+    border-radius:6px; padding:4px 9px; font:600 11px var(--mono); cursor:pointer;
+  }
+  .range-btn.active{ color:var(--text); border-color:var(--green); background:var(--green-dim); }
+  .chart-legend{ display:flex; gap:14px; margin-top:9px; color:var(--muted); font:11px var(--mono); flex-wrap:wrap; }
+  .legend-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+
+  /* ---------- Risk panel ---------- */
+  .risk-pick{ display:flex; gap:8px; padding:14px 18px; border-bottom:1px solid var(--line); }
+  .risk-pick input{
+    flex:1; min-width:0; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--text); border-radius:7px; padding:9px 11px; font-family:var(--mono);
+  }
+  .risk-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--line); margin:0 18px 0; border-radius:8px; overflow:hidden; border:1px solid var(--line); }
+  .risk-stat{ background:var(--panel-2); padding:11px 14px; }
+  .risk-stat .label{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .risk-stat .value{ font-family:var(--mono); font-size:15px; font-weight:600; margin-top:3px; }
+  .risk-verdict{ display:flex; align-items:center; gap:10px; padding:16px 18px 4px; }
+  .risk-verdict .signal-badge{ font-family:var(--mono); font-weight:700; font-size:18px; padding:4px 12px; border-radius:6px; }
+  .reasoning-log{ padding:10px 18px 18px; font-family:var(--mono); font-size:12px; }
+  .reasoning-log .line{ display:flex; gap:8px; padding:5px 0; color:var(--muted); border-bottom:1px dashed var(--line); }
+  .reasoning-log .line:last-child{ border-bottom:none; }
+  .reasoning-log .marker{ color:var(--muted-2); flex-shrink:0; }
+  .risk-empty{ padding:30px 18px; text-align:center; color:var(--muted-2); font-style:italic; font-family:var(--sans); font-size:13px; }
+
+  .toast{
+    position:fixed; bottom:20px; right:20px; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:8px; padding:12px 16px; font-size:13px; font-family:var(--mono);
+    box-shadow:0 8px 24px rgba(0,0,0,.4); opacity:0; transform:translateY(8px);
+    transition:opacity .2s, transform .2s; pointer-events:none; max-width:340px;
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+  .toast.error{ border-color:var(--red); color:var(--red); }
+  .toast.success{ border-color:var(--green); color:var(--green); }
+
+  .loading-text{ color:var(--muted-2); font-family:var(--mono); font-size:12px; padding:18px; }
+
+  .section-spacer{ height:18px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">QUANTIFY<span class="dot">·</span>SIM</span>
+      <span class="sub">Paper Trading Terminal</span>
+    </div>
+    <div class="user-switch">
+      <select id="userSelect"></select>
+      <input id="newUserName" placeholder="Name" style="width:110px" />
+      <button class="btn btn-small" id="createUserBtn">+ New trader</button>
+    </div>
+  </div>
+
+  <div class="account-strip" id="accountStrip">
+    <div class="acc-cell">
+      <div class="label">Cash Balance</div>
+      <div class="value" id="cashBalance">—</div>
+    </div>
+    <div class="acc-cell">
+      <div class="label">Invested Value</div>
+      <div class="value" id="investedValue">—</div>
+    </div>
+    <div class="acc-cell">
+      <div class="label">Total Equity</div>
+      <div class="value" id="totalEquity">—</div>
+    </div>
+    <div class="acc-cell">
+      <div class="label">Total Gain / Loss</div>
+      <div class="value" id="totalPnl">—</div>
+      <div class="delta" id="totalPnlPct"></div>
+    </div>
+  </div>
+
+  <div class="symbol-search">
+    <input id="symbolSearch" list="symbolSuggestions" placeholder="Search a symbol, e.g. AAPL" />
+    <datalist id="symbolSuggestions"></datalist>
+    <button class="btn btn-primary" id="symbolSearchBtn">Open market view</button>
+    <span class="quote-read" id="liveQuoteRead">—</span>
+  </div>
+
+  <div class="grid">
+    <div class="col-main">
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Trader Performance</h2>
+          <span class="hint" id="performanceHint">all trades combined</span>
+        </div>
+        <div class="chart-wrap">
+          <svg class="chart" id="performanceChart" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+          <div class="chart-legend" id="performanceLegend"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Positions</h2>
+          <span class="hint" id="positionsHint">live valuation</span>
+        </div>
+        <div class="panel-body flush">
+          <table>
+            <thead>
+              <tr>
+                <th>Ticker</th><th class="right">Qty</th><th class="right">Avg Cost</th>
+                <th class="right">Last Price</th><th class="right">Market Value</th><th class="right">Unrealized P/L</th>
+              </tr>
+            </thead>
+            <tbody id="positionsBody">
+              <tr class="empty-row"><td colspan="6">No open positions yet — buy something below.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Price History</h2>
+          <div class="chart-controls" id="rangeControls">
+            <button class="range-btn active" data-range="24h">24H</button>
+            <button class="range-btn" data-range="1w">1W</button>
+            <button class="range-btn" data-range="1m">1M</button>
+            <button class="range-btn" data-range="1y">1Y</button>
+            <button class="range-btn" data-range="all">ALL</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <div class="hint" id="chartHint">Search a symbol to begin collecting local history.</div>
+          <svg class="chart" id="priceChart" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+          <div class="chart-legend" id="chartLegend"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Trade History</h2>
+        </div>
+        <div class="panel-body flush">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th><th>Ticker</th><th>Side</th><th class="right">Qty</th>
+                <th class="right">Price</th><th class="right">Realized P/L</th>
+              </tr>
+            </thead>
+            <tbody id="tradesBody">
+              <tr class="empty-row"><td colspan="6">No trades yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
 
-    <canvas id="chart" width="900" height="380" style="border:1px solid #ddd"></canvas>
+    <div class="col-side">
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-      async function loadPerformance() {
-        const uid = document.getElementById('uid').value;
-        const res = await fetch(`/api/performance?user_id=${uid}`);
-        const data = await res.json();
-        const labels = data.curve.map(p => p.date);
-        const values = data.curve.map(p => p.equity);
-        const ctx = document.getElementById('chart').getContext('2d');
-        if (window.eqChart) window.eqChart.destroy();
-        window.eqChart = new Chart(ctx, {
-          type: 'line',
-          data: { labels, datasets: [{ label: 'Equity', data: values, fill: false }]},
-          options: { responsive: false }
-        });
-      }
-      document.getElementById('refresh').onclick = loadPerformance;
-    </script>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Trade Ticket</h2>
+        </div>
+        <div class="panel-body">
+          <div class="ticket-row">
+            <div class="field" style="flex:2">
+              <label>Ticker</label>
+              <input id="ticketTicker" placeholder="AAPL" maxlength="10" style="text-transform:uppercase" />
+            </div>
+            <div class="field">
+              <label>Quantity</label>
+              <input id="ticketQty" type="number" min="1" step="1" value="10" />
+            </div>
+          </div>
+          <div class="ticket-row">
+            <div class="side-toggle" id="sideToggle">
+              <button type="button" class="active buy" data-side="BUY">BUY</button>
+              <button type="button" class="sell" data-side="SELL">SELL</button>
+            </div>
+          </div>
+          <div class="ticket-row">
+            <button class="btn btn-small" id="fetchPriceBtn" style="flex:1">Refresh Finnhub quote</button>
+          </div>
+          <div class="ticket-summary" id="ticketSummary">Enter a ticker to see the latest sampled price.</div>
+          <button class="btn btn-primary" id="submitTradeBtn" style="width:100%">Place simulated trade</button>
+          <div class="ticket-error" id="ticketError"></div>
+        </div>
+      </div>
 
-    <h2 style="margin-top:28px;">Buy / Sell Stocks</h2>
-    <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
-      <label>Ticker: <input id="ticker" placeholder="AAPL" style="width:100px"></label>
-      <label>Quantity: <input id="qty" type="number" value="1" min="1" style="width:90px"></label>
-      <label>Price (optional): <input id="price" type="number" step="0.01" placeholder="market" style="width:110px"></label>
-      <select id="side">
-        <option value="BUY">BUY</option>
-        <option value="SELL">SELL</option>
-      </select>
-      <button id="submitTrade">Submit Trade</button>
-      <small>Tip: run price ingestion first: POST /api/prices/&lt;TICKER&gt;</small>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Risk Advisor</h2>
+          <span class="hint">local · rule-based</span>
+        </div>
+        <div class="risk-pick">
+          <input id="riskTicker" placeholder="Ticker, e.g. AAPL" style="text-transform:uppercase" />
+          <button class="btn btn-small" id="riskBtn">Check</button>
+        </div>
+        <div id="riskBody">
+          <div class="risk-empty">Enter a ticker above, or click a position, to see its risk read.</div>
+        </div>
+      </div>
+
     </div>
+  </div>
 
-    <div id="tradeMsg" style="color:#008000; margin-bottom:18px;"></div>
+</div>
 
-    <h2>Current Stocks Owned</h2>
-    <div style="margin-bottom:10px;">
-      <label>Date (as of): <input id="asof" type="date"></label>
-      <button id="refreshPositions">Refresh Positions</button>
-    </div>
+<div class="toast" id="toast"></div>
 
-    <table id="positionsTable" border="1" cellpadding="6" style="border-collapse:collapse; min-width:720px;">
-      <thead>
-        <tr>
-          <th>Ticker</th>
-          <th>Quantity</th>
-          <th>Avg Cost</th>
-          <th>Last Price</th>
-          <th>Market Value</th>
-          <th>Unrealized P/L</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+<script>
+const API = "/api";
+let currentUserId = null;
+let currentTicker = null;
+let tradeSide = "BUY";
+let currentRange = "24h";
+let quoteRefreshTimer = null;
 
-    <script>
-      async function submitTrade() {
-        const uid = document.getElementById('uid').value;
-        const ticker = document.getElementById('ticker').value.trim().toUpperCase();
-        const qty = parseInt(document.getElementById('qty').value || "0", 10);
-        const side = document.getElementById('side').value;
-        const priceStr = document.getElementById('price').value;
-        const price = priceStr ? parseFloat(priceStr) : null;
+// ---------- helpers ----------
+function money(n){
+  const v = Number(n);
+  const sign = v < 0 ? "-" : "";
+  return sign + "$" + Math.abs(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function pct(n){
+  const v = Number(n);
+  return (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+function cls(n){ return Number(n) > 0 ? "up" : Number(n) < 0 ? "down" : "flat"; }
 
-        if (!uid || !ticker || qty <= 0) {
-          alert("Enter user id, ticker, and positive quantity.");
-          return;
-        }
-        try {
-          const res = await fetch('/api/trades', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ user_id: Number(uid), ticker, side, quantity: qty, price })
-          });
-          const data = await res.json();
-          if (res.ok) {
-            document.getElementById('tradeMsg').textContent =
-              `${side} ${qty} ${ticker} @ ${data.price} ✓`;
-            document.getElementById('price').value = '';
-            await loadPerformance();
-            await loadPositions();
-          } else {
-            document.getElementById('tradeMsg').style.color = '#b00020';
-            document.getElementById('tradeMsg').textContent = data.error || JSON.stringify(data);
-          }
-        } catch (e) {
-          document.getElementById('tradeMsg').style.color = '#b00020';
-          document.getElementById('tradeMsg').textContent = String(e);
-        }
-      }
+function showToast(msg, type){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show " + (type || "");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 3500);
+}
 
-      async function loadPositions() {
-        const uid = document.getElementById('uid').value;
-        const asofInput = document.getElementById('asof').value;
-        const qs = new URLSearchParams({ user_id: uid });
-        if (asofInput) qs.set('date', asofInput);
-        const res = await fetch('/api/positions?' + qs.toString());
-        const data = await res.json();
-        const tbody = document.querySelector('#positionsTable tbody');
-        tbody.innerHTML = '';
-        (data.positions || []).forEach(p => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${p.ticker}</td>
-                          <td>${p.quantity}</td>
-                          <td>${p.avg_cost}</td>
-                          <td>${p.last_price}</td>
-                          <td>${p.market_value}</td>
-                          <td>${p.unrealized_pl}</td>`;
-          tbody.appendChild(tr);
-        });
-      }
+async function api(path, opts){
+  const res = await fetch(API + path, Object.assign({headers:{"Content-Type":"application/json"}}, opts || {}));
+  let body;
+  try { body = await res.json(); } catch(e){ body = {}; }
+  if (!res.ok) throw new Error(body.error || ("Request failed: " + res.status));
+  return body;
+}
 
-      document.getElementById('submitTrade').onclick = submitTrade;
-      document.getElementById('refreshPositions').onclick = loadPositions;
+// ---------- users ----------
+async function loadUsers(){
+  const sel = document.getElementById("userSelect");
+  sel.innerHTML = "";
+  try {
+    const data = await api("/users");
+    const users = data.users || [];
+    if (!users.length){
+      const opt = document.createElement("option");
+      opt.textContent = "No traders yet — create one →";
+      sel.appendChild(opt);
+      return;
+    }
+    users.forEach(u => {
+      const opt = document.createElement("option");
+      opt.value = u.id;
+      opt.textContent = `${u.name} (#${u.id})`;
+      sel.appendChild(opt);
+    });
+    currentUserId = Number(sel.value);
+    refreshAccount();
+  } catch(e){
+    showToast(e.message, "error");
+  }
+}
 
-      // auto-load on first visit
-      loadPerformance();
-      loadPositions();
-    </script>
-  </body>
+document.getElementById("createUserBtn").addEventListener("click", async () => {
+  const name = document.getElementById("newUserName").value.trim();
+  if (!name) { showToast("Enter a name first", "error"); return; }
+  try {
+    const user = await api("/users", {
+      method: "POST",
+      body: JSON.stringify({ name, email: `${name.toLowerCase().replace(/\s+/g,'.')}.${Date.now()}@sim.local` })
+    });
+    document.getElementById("newUserName").value = "";
+    await loadUsers();
+    document.getElementById("userSelect").value = user.id;
+    currentUserId = user.id;
+    refreshAccount();
+    showToast(`Created trader "${user.name}" with $100,000 virtual cash`, "success");
+  } catch(e){
+    showToast(e.message, "error");
+  }
+});
+
+document.getElementById("userSelect").addEventListener("change", (e) => {
+  currentUserId = Number(e.target.value);
+  refreshAccount();
+});
+
+// ---------- account summary + positions ----------
+async function refreshAccount(){
+  if (!currentUserId) return;
+  try {
+    const summary = await api(`/account/${currentUserId}`);
+    document.getElementById("cashBalance").textContent = money(summary.cash_balance);
+    document.getElementById("investedValue").textContent = money(summary.invested_value);
+    document.getElementById("totalEquity").textContent = money(summary.total_equity);
+
+    const startingBalance = 100000.0; // matches services.STARTING_BALANCE default
+    const totalPnl = summary.total_equity - startingBalance;
+    const totalPnlPct = (totalPnl / startingBalance) * 100;
+    const pnlEl = document.getElementById("totalPnl");
+    pnlEl.textContent = money(totalPnl);
+    pnlEl.className = "value " + cls(totalPnl);
+    document.getElementById("totalPnlPct").textContent = pct(totalPnlPct);
+    document.getElementById("totalPnlPct").className = "delta " + cls(totalPnl);
+
+    renderPositions(summary.positions || []);
+  } catch(e){
+    showToast(e.message, "error");
+  }
+  refreshTrades();
+  refreshPerformance();
+}
+
+async function refreshPerformance(){
+  if (!currentUserId) return;
+  const svg = document.getElementById("performanceChart");
+  try {
+    const data = await api(`/performance?user_id=${currentUserId}`);
+    const points = data.curve || [];
+    if (!points.length){
+      svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">Place a trade to begin the combined performance graph.</text>`;
+      document.getElementById("performanceHint").textContent = "all trades combined";
+      document.getElementById("performanceLegend").innerHTML = "";
+      return;
+    }
+
+    const equities = points.map(p => Number(p.equity));
+    const min = Math.min(...equities), max = Math.max(...equities);
+    const w = 600, h = 220, pad = 24;
+    const xStep = points.length > 1 ? (w - pad*2) / (points.length - 1) : 0;
+    const yFor = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
+    const coords = points.map((p,i) => `${pad + i*xStep},${yFor(Number(p.equity))}`).join(" ");
+    const gain = Number(data.summary.gain_abs || 0);
+    const color = gain >= 0 ? "var(--green)" : "var(--red)";
+    const line = points.length === 1
+      ? `<circle cx="${pad}" cy="${yFor(equities[0])}" r="4" fill="${color}" />`
+      : `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`;
+    const startLabel = new Date(points[0].timestamp).toLocaleString();
+    const endLabel = new Date(points[points.length-1].timestamp).toLocaleString();
+
+    svg.innerHTML = `${line}
+      <text x="${pad}" y="14" class="chart-axis-label">${money(max)}</text>
+      <text x="${pad}" y="${h-8}" class="chart-axis-label">${money(min)}</text>
+      <text x="${w-pad}" y="14" text-anchor="end" class="chart-axis-label">${endLabel}</text>
+      <text x="${pad}" y="${h-pad+18}" class="chart-axis-label">${startLabel}</text>`;
+    document.getElementById("performanceHint").textContent =
+      `${pct(data.summary.gain_pct || 0)} · ${points.length} account snapshots`;
+    document.getElementById("performanceLegend").innerHTML =
+      `<span><i class="legend-dot" style="background:${color}"></i>Total equity</span>
+       <span>Start ${money(data.summary.equity_start)}</span>
+       <span>Current ${money(data.summary.equity_end)}</span>
+       <span class="${cls(gain)}">P/L ${money(gain)}</span>`;
+  } catch(e){
+    svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">${e.message}</text>`;
+  }
+}
+
+function renderPositions(positions){
+  const body = document.getElementById("positionsBody");
+  document.getElementById("positionsHint").textContent = `${positions.length} open`;
+  if (!positions.length){
+    body.innerHTML = `<tr class="empty-row"><td colspan="6">No open positions yet — buy something below.</td></tr>`;
+    return;
+  }
+  body.innerHTML = positions.map(p => `
+    <tr style="cursor:pointer" onclick="selectTickerFromPosition('${p.ticker}')">
+      <td class="ticker">${p.ticker}</td>
+      <td class="right">${p.quantity}</td>
+      <td class="right">${money(p.avg_cost)}</td>
+      <td class="right">${money(p.last_price)}</td>
+      <td class="right">${money(p.market_value)}</td>
+      <td class="right ${cls(p.unrealized_pl)}">${money(p.unrealized_pl)}</td>
+    </tr>
+  `).join("");
+}
+
+function selectTickerFromPosition(ticker){
+  document.getElementById("ticketTicker").value = ticker;
+  document.getElementById("riskTicker").value = ticker;
+  document.getElementById("symbolSearch").value = ticker;
+  refreshLiveQuote(ticker, false);
+  loadChart(ticker);
+  loadRisk(ticker);
+  refreshTicketSummary();
+}
+
+// ---------- trade history ----------
+async function refreshTrades(){
+  if (!currentUserId) return;
+  try {
+    const data = await api(`/trades?user_id=${currentUserId}`);
+    const rows = (data.trades || []).slice().reverse();
+    const body = document.getElementById("tradesBody");
+    if (!rows.length){
+      body.innerHTML = `<tr class="empty-row"><td colspan="6">No trades yet.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(t => `
+      <tr>
+        <td>${new Date(t.timestamp).toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
+        <td class="ticker">${t.ticker}</td>
+        <td><span class="pill ${t.side === 'BUY' ? 'pill-buy' : 'pill-sell'}">${t.side}</span></td>
+        <td class="right">${t.quantity}</td>
+        <td class="right">${money(t.price)}</td>
+        <td class="right ${t.realized_pnl != null ? cls(t.realized_pnl) : 'flat'}">${t.realized_pnl != null ? money(t.realized_pnl) : '—'}</td>
+      </tr>
+    `).join("");
+  } catch(e){
+    showToast(e.message, "error");
+  }
+}
+
+// ---------- trade ticket ----------
+document.getElementById("sideToggle").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  tradeSide = btn.dataset.side;
+  document.querySelectorAll("#sideToggle button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("submitTradeBtn").className = tradeSide === "BUY" ? "btn btn-primary" : "btn btn-sell";
+  document.getElementById("submitTradeBtn").textContent = tradeSide === "BUY" ? "Place simulated trade" : "Place simulated trade";
+  refreshTicketSummary();
+});
+
+document.getElementById("ticketTicker").addEventListener("input", refreshTicketSummary);
+document.getElementById("ticketQty").addEventListener("input", refreshTicketSummary);
+
+async function refreshTicketSummary(){
+  const ticker = document.getElementById("ticketTicker").value.trim().toUpperCase();
+  const qty = Number(document.getElementById("ticketQty").value) || 0;
+  const summaryEl = document.getElementById("ticketSummary");
+  if (!ticker){ summaryEl.textContent = "Enter a ticker to see the latest sampled price."; return; }
+  try {
+    const quote = await api(`/quote/${ticker}`);
+    const total = quote.price * qty;
+    summaryEl.innerHTML = `Latest sample <b>${money(quote.price)}</b> &middot; Est. ${tradeSide === 'BUY' ? 'cost' : 'proceeds'}: <b>${money(total)}</b>`;
+  } catch(e){
+    summaryEl.textContent = e.message;
+  }
+}
+
+document.getElementById("fetchPriceBtn").addEventListener("click", async () => {
+  const ticker = document.getElementById("ticketTicker").value.trim().toUpperCase();
+  if (!ticker){ showToast("Enter a ticker first", "error"); return; }
+  const btn = document.getElementById("fetchPriceBtn");
+  btn.disabled = true;
+  btn.textContent = "Fetching…";
+  try {
+    const res = await api(`/quote/${ticker}`, { method: "POST" });
+    showToast(`Stored ${ticker} at ${money(res.price)}`, "success");
+    currentTicker = ticker;
+    document.getElementById("symbolSearch").value = ticker;
+    await refreshTicketSummary();
+    await loadChart(ticker);
+  } catch(e){
+    showToast(e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Refresh Finnhub quote";
+  }
+});
+
+document.getElementById("submitTradeBtn").addEventListener("click", async () => {
+  const errorEl = document.getElementById("ticketError");
+  errorEl.textContent = "";
+  if (!currentUserId){ errorEl.textContent = "Create or select a trader first."; return; }
+  const ticker = document.getElementById("ticketTicker").value.trim().toUpperCase();
+  const qty = Number(document.getElementById("ticketQty").value);
+  if (!ticker || !qty || qty <= 0){ errorEl.textContent = "Enter a valid ticker and quantity."; return; }
+
+  try {
+    const res = await api("/trades", {
+      method: "POST",
+      body: JSON.stringify({ user_id: currentUserId, ticker, side: tradeSide, quantity: qty })
+    });
+    showToast(`${res.side} ${res.quantity} ${res.ticker} @ ${money(res.price)}`, "success");
+    refreshAccount();
+    loadChart(ticker);
+  } catch(e){
+    errorEl.textContent = e.message;
+  }
+});
+
+// ---------- symbol search + locally sampled chart ----------
+let symbolLookupTimer = null;
+document.getElementById("symbolSearch").addEventListener("input", (e) => {
+  clearTimeout(symbolLookupTimer);
+  const query = e.target.value.trim();
+  if (!query) return;
+  symbolLookupTimer = setTimeout(async () => {
+    try {
+      const data = await api(`/symbols?q=${encodeURIComponent(query)}`);
+      document.getElementById("symbolSuggestions").innerHTML = (data.results || [])
+        .map(r => `<option value="${r.symbol}">${r.description || r.type || ""}</option>`).join("");
+    } catch (_) {}
+  }, 300);
+});
+
+document.getElementById("symbolSearch").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("symbolSearchBtn").click();
+});
+
+document.getElementById("symbolSearchBtn").addEventListener("click", async () => {
+  const ticker = document.getElementById("symbolSearch").value.trim().toUpperCase();
+  if (!ticker) return;
+  document.getElementById("ticketTicker").value = ticker;
+  document.getElementById("riskTicker").value = ticker;
+  await refreshLiveQuote(ticker, true);
+  await loadChart(ticker);
+  refreshTicketSummary();
+});
+
+document.getElementById("rangeControls").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-range]");
+  if (!btn) return;
+  currentRange = btn.dataset.range;
+  document.querySelectorAll(".range-btn").forEach(b => b.classList.toggle("active", b === btn));
+  if (currentTicker) loadChart(currentTicker);
+});
+
+async function refreshLiveQuote(ticker, force){
+  currentTicker = ticker;
+  try {
+    const quote = await api(`/quote/${ticker}${force ? "?refresh=1" : ""}`, force ? {method:"POST"} : {});
+    renderLiveQuote(quote);
+    clearInterval(quoteRefreshTimer);
+    quoteRefreshTimer = setInterval(async () => {
+      if (!currentTicker) return;
+      try {
+        // Read the newest sample from our database. The backend sampler is
+        // responsible for the Finnhub call, avoiding duplicate API requests.
+        const newest = await api(`/quote/${currentTicker}`);
+        renderLiveQuote(newest);
+        await loadChart(currentTicker);
+        if (currentUserId) await refreshAccount();
+      } catch (_) {}
+    }, 30000);
+    return quote;
+  } catch(e){
+    showToast(e.message, "error");
+  }
+}
+
+function renderLiveQuote(quote){
+  const sampledAt = quote.fetched_at
+    ? new Date(quote.fetched_at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"})
+    : "—";
+  document.getElementById("liveQuoteRead").innerHTML =
+    `${quote.ticker || currentTicker} <b class="${cls(quote.change)}">${money(quote.price)}</b> ` +
+    `<span class="${cls(quote.change_percent)}">${pct(quote.change_percent || 0)}</span> ` +
+    `<span class="flat">AUTO 30s · ${sampledAt}</span>`;
+}
+
+async function loadChart(ticker){
+  if (!ticker) return;
+  currentTicker = ticker.toUpperCase();
+  document.getElementById("chartHint").textContent = `${currentTicker} · ${currentRange.toUpperCase()} · locally sampled history`;
+  const svg = document.getElementById("priceChart");
+  try {
+    const data = await api(`/chart/${currentTicker}?range=${currentRange}`);
+    const chartPoints = data.points || [];
+    if (!chartPoints.length){
+      svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">No samples yet. Open or refresh ${currentTicker} to store the first one.</text>`;
+      document.getElementById("chartLegend").innerHTML = "";
+      return;
+    }
+    const values = chartPoints.flatMap(p => data.multi_line ? [p.close, p.high, p.low] : [p.close]);
+    const min = Math.min(...values), max = Math.max(...values);
+    const w = 600, h = 220, pad = 24;
+    const xStep = chartPoints.length > 1 ? (w - pad*2) / (chartPoints.length - 1) : 0;
+    const yFor = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
+    const polyline = (key, color) => {
+      const coords = chartPoints.map((p,i) => `${pad + i*xStep},${yFor(p[key])}`).join(" ");
+      if (chartPoints.length === 1) return `<circle cx="${pad}" cy="${yFor(chartPoints[0][key])}" r="4" fill="${color}" />`;
+      return `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`;
+    };
+    const closeUp = chartPoints[chartPoints.length-1].close >= chartPoints[0].close;
+    const closeColor = closeUp ? "var(--green)" : "var(--red)";
+    const lines = data.multi_line
+      ? polyline("close", "var(--green)") + polyline("high", "var(--amber)") + polyline("low", "var(--red)")
+      : polyline("close", closeColor);
+    const startLabel = new Date(chartPoints[0].timestamp).toLocaleString();
+    const endLabel = new Date(chartPoints[chartPoints.length-1].timestamp).toLocaleString();
+
+    svg.innerHTML = `${lines}
+      <text x="${pad}" y="14" class="chart-axis-label">${money(max)}</text>
+      <text x="${pad}" y="${h-8}" class="chart-axis-label">${money(min)}</text>
+      <text x="${w-pad}" y="14" text-anchor="end" class="chart-axis-label">${endLabel}</text>
+      <text x="${pad}" y="${h-pad+18}" class="chart-axis-label">${startLabel}</text>
+    `;
+    document.getElementById("chartLegend").innerHTML = data.multi_line
+      ? `<span><i class="legend-dot" style="background:var(--green)"></i>Close</span>
+         <span><i class="legend-dot" style="background:var(--amber)"></i>High</span>
+         <span><i class="legend-dot" style="background:var(--red)"></i>Low</span>`
+      : `<span><i class="legend-dot" style="background:${closeColor}"></i>Sampled price</span>
+         <span>Session high ${money(Math.max(...chartPoints.map(p => p.high)))}</span>
+         <span>Session low ${money(Math.min(...chartPoints.map(p => p.low)))}</span>`;
+  } catch(e){
+    svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">${e.message}</text>`;
+  }
+}
+
+// ---------- risk advisor ----------
+document.getElementById("riskBtn").addEventListener("click", () => {
+  const ticker = document.getElementById("riskTicker").value.trim().toUpperCase();
+  if (ticker) loadRisk(ticker);
+});
+document.getElementById("riskTicker").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("riskBtn").click();
+});
+
+async function loadRisk(ticker){
+  const body = document.getElementById("riskBody");
+  body.innerHTML = `<div class="loading-text">Computing risk read for ${ticker}…</div>`;
+  try {
+    const a = await api(`/risk/${ticker}`);
+    const riskPillClass = "pill-" + a.risk_level.toLowerCase();
+    const signalColor = a.signal === "BUY" ? "var(--green)" : a.signal === "SELL" ? "var(--red)" : "var(--muted)";
+    const signalBg = a.signal === "BUY" ? "var(--green-dim)" : a.signal === "SELL" ? "var(--red-dim)" : "#252B35";
+
+    body.innerHTML = `
+      <div class="risk-verdict">
+        <span class="signal-badge" style="color:${signalColor};background:${signalBg}">${a.signal}</span>
+        <span class="pill ${riskPillClass}">${a.risk_level} risk</span>
+        <span style="margin-left:auto;font-family:var(--mono);color:var(--muted);font-size:12px">as of ${a.as_of}</span>
+      </div>
+      <div class="risk-grid">
+        <div class="risk-stat"><div class="label">Last Close</div><div class="value">${money(a.last_close)}</div></div>
+        <div class="risk-stat"><div class="label">Annualized Vol</div><div class="value">${a.annualized_volatility_pct.toFixed(1)}%</div></div>
+        <div class="risk-stat"><div class="label">Momentum (5/20)</div><div class="value ${cls(a.momentum_5_20_pct)}">${pct(a.momentum_5_20_pct)}</div></div>
+        <div class="risk-stat"><div class="label">20d Return</div><div class="value ${cls(a.return_20d_pct)}">${pct(a.return_20d_pct)}</div></div>
+        <div class="risk-stat"><div class="label">Max Drawdown</div><div class="value down">${a.max_drawdown_pct.toFixed(1)}%</div></div>
+        <div class="risk-stat"><div class="label">Avg True Range</div><div class="value">${a.avg_true_range_pct.toFixed(2)}%</div></div>
+      </div>
+      <div class="reasoning-log">
+        ${a.reasoning.map(r => `<div class="line"><span class="marker">›</span>${r}</div>`).join("")}
+      </div>
+    `;
+  } catch(e){
+    body.innerHTML = `<div class="risk-empty">${e.message}</div>`;
+  }
+}
+
+// ---------- init ----------
+loadUsers();
+</script>
+
+</body>
 </html>
