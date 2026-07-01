@@ -8,7 +8,7 @@ Worker Service
 Database
  └── PostgreSQL
 ```
-This separation matters because production web servers such as Gunicorn may run multiple worker processes. If each web worker starts its own scheduler, the app could accidentally duplicate market data calls and insert repeated samples. A dedicated worker process gives the quote sampler a single owner.
+In production, the web app and quote sampler should run as separate processes. The web service handles user requests, while a dedicated worker collects market data on a schedule. This avoids duplicated quote collection when the web server runs multiple workers and makes the system easier to monitor, scale, and debug.
 ---
 ## Project Status
 The project currently has a working paper trading and market data foundation.
