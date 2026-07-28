@@ -28,11 +28,6 @@ rule-based risk advisor operates on the history available in the database.
 The app runs at `http://127.0.0.1:5001`. Port 5000 is commonly occupied by
 macOS AirPlay Receiver; change `APP_PORT` in `.env` if needed.
 
-## Security note
-
-Never put a real API key in a tracked file. Keep it in `.env`, which is
-already ignored by Git.
-
 ## API overview
 
 | Method | Path | Description |
