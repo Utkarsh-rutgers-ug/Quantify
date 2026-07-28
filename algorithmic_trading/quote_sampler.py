@@ -1,6 +1,7 @@
 """Background collection of Finnhub quotes for every watched symbol."""
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 _next_ticker_index = 0
 
@@ -30,11 +31,10 @@ def sample_watched_tickers(app):
                 app.logger.warning("Could not sample %s: %s", ticker, exc)
 
 
-def start_quote_sampler(app):
-    interval_seconds = max(
-        30, int(os.getenv("QUOTE_SAMPLE_INTERVAL_SECONDS", "30"))
-    )
-    scheduler = BackgroundScheduler(daemon=True, timezone="UTC")
+def _build_scheduler(app, scheduler_class):
+    """Configure a scheduler without deciding how its process stays alive."""
+    interval_seconds = max(30, int(os.getenv("QUOTE_SAMPLE_INTERVAL_SECONDS", "30")))
+    scheduler = scheduler_class(timezone="UTC")
     scheduler.add_job(
         sample_watched_tickers,
         "interval",
@@ -45,10 +45,29 @@ def start_quote_sampler(app):
         max_instances=1,
         coalesce=True,
     )
-    scheduler.start()
-    # Collect once immediately instead of waiting for the first interval.
-    sample_watched_tickers(app)
+    return scheduler, interval_seconds
+
+
+def _log_sampler_started(app, interval_seconds):
     app.logger.info(
         "Automatic Finnhub sampler started: every %s seconds", interval_seconds
     )
+
+
+def start_quote_sampler(app):
+    """Start sampling in the background while another local process stays alive."""
+    scheduler, interval_seconds = _build_scheduler(app, BackgroundScheduler)
+    scheduler.start()
+    # Collect once immediately instead of waiting for the first interval.
+    sample_watched_tickers(app)
+    _log_sampler_started(app, interval_seconds)
     return scheduler
+
+
+def run_quote_sampler_worker(app):
+    """Run the sampler as the foreground process for a dedicated worker."""
+    scheduler, interval_seconds = _build_scheduler(app, BlockingScheduler)
+    # Collect once immediately before the scheduler begins its blocking loop.
+    sample_watched_tickers(app)
+    _log_sampler_started(app, interval_seconds)
+    scheduler.start()
