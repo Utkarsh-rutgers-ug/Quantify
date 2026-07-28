@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 from models import db
 from routes import api_bp
 
-load_dotenv()  # reads .env in the project root, if present
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))  # reads the app's .env no matter where Python starts
 
 
 def create_app():
