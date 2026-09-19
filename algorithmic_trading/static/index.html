@@ -187,6 +187,133 @@
   .loading-text{ color:var(--muted-2); font-family:var(--mono); font-size:12px; padding:18px; }
 
   .section-spacer{ height:18px; }
+
+  /* ---------- Terminal workspace refresh ---------- */
+  :root{
+    --bg:#070A0E;
+    --panel:#0C1117;
+    --panel-2:#101720;
+    --line:#202A36;
+    --text:#E7EDF5;
+    --muted:#7F8B9C;
+    --muted-2:#4F5B6B;
+    --green:#00D68F;
+    --green-dim:#083D2D;
+    --red:#FF5A67;
+    --red-dim:#471D25;
+    --amber:#F1B84B;
+    --radius:3px;
+  }
+  html, body{ min-height:100%; }
+  body{
+    background:
+      radial-gradient(circle at 45% -20%, rgba(30,51,75,.22), transparent 38%),
+      var(--bg);
+    font-size:13px;
+  }
+  .app{ width:100%; max-width:none; margin:0; padding:0 14px 30px; }
+  .topbar{
+    min-height:48px; margin:0 -14px 0; padding:0 18px;
+    background:#090D12; border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20; flex-wrap:nowrap;
+  }
+  .brand .mark{ font-size:15px; letter-spacing:.08em; }
+  .brand .sub{ font-size:10px; }
+  .user-switch select, .user-switch input, .btn, .field input, .field select,
+  .risk-pick input, .symbol-search input{ border-radius:2px; }
+  .btn{ padding:6px 11px; }
+  .account-strip{
+    margin:0 -14px 0; border:0; border-bottom:1px solid var(--line);
+    border-radius:0; grid-template-columns:repeat(4, minmax(150px, 1fr));
+  }
+  .acc-cell{ padding:10px 18px; background:#0A0F15; }
+  .acc-cell .label{ font-size:9px; margin-bottom:2px; }
+  .acc-cell .value{ font-size:17px; }
+  .acc-cell .delta{ display:inline; margin-left:7px; }
+  .symbol-search{
+    margin:10px 0; padding:7px 8px; border-radius:2px;
+    background:#0A0F15; min-height:42px;
+  }
+  .symbol-search input{ padding:7px 9px; background:#080D12; }
+  .grid{ grid-template-columns:minmax(0, 1fr) 300px; gap:10px; align-items:start; }
+  .col-main, .col-side{ min-width:0; }
+  .col-side{ position:sticky; top:58px; }
+  .panel{ margin-bottom:10px; border-radius:2px; background:rgba(12,17,23,.96); }
+  .panel-head{ min-height:38px; padding:8px 12px; background:#0A0F15; }
+  .panel-head h2{ font-size:10px; letter-spacing:.12em; }
+  .panel-head .hint{ font-size:10px; }
+  .panel-body{ padding:12px; }
+  th{ padding:8px 12px; font-size:9px; background:#0A0F15; }
+  td{ padding:8px 12px; font-size:11px; }
+  tbody tr:hover td{ background:#101720; }
+  .pill{ border-radius:2px; padding:1px 6px; }
+  .ticket-row{ margin-bottom:9px; gap:7px; }
+  .field label{ font-size:9px; }
+  .field input, .field select{ padding:7px 8px; }
+  .side-toggle button{ border-radius:2px; padding:7px; }
+  .chart-wrap{ padding:0; }
+  .chart-meta{
+    min-height:31px; display:flex; align-items:center; padding:0 11px;
+    color:var(--muted); font:10px var(--mono); border-bottom:1px solid var(--line);
+  }
+  .primary-chart-panel{ border-color:#263445; }
+  .chart-stage{
+    position:relative; display:grid; grid-template-columns:minmax(0, 1fr) 78px;
+    height:430px; background:#080C11; overflow:hidden;
+  }
+  .chart-scroll{
+    position:relative; overflow-x:auto; overflow-y:hidden; min-width:0;
+    scrollbar-width:thin; scrollbar-color:#344154 #0B1016;
+    cursor:grab; overscroll-behavior:contain;
+  }
+  .chart-scroll.dragging{ cursor:grabbing; user-select:none; }
+  .chart-scroll::-webkit-scrollbar{ height:7px; }
+  .chart-scroll::-webkit-scrollbar-track{ background:#0B1016; }
+  .chart-scroll::-webkit-scrollbar-thumb{ background:#344154; border-radius:0; }
+  svg.market-chart{ height:100%; display:block; max-width:none; }
+  .chart-y-axis{
+    width:78px; height:100%; display:block; background:#0B1016;
+    border-left:1px solid #354254; position:relative; z-index:3;
+  }
+  .chart-jump{
+    position:absolute; right:90px; top:10px; z-index:5; display:none;
+    background:#111A24; border:1px solid #334257; color:#B8C5D6;
+    font:600 10px var(--mono); padding:5px 8px; border-radius:2px; cursor:pointer;
+  }
+  .chart-jump.visible{ display:block; }
+  .chart-legend{
+    min-height:31px; align-items:center; margin:0; padding:0 11px;
+    border-top:1px solid var(--line); background:#0A0F15; font-size:10px;
+  }
+  .chart-controls{ gap:2px; }
+  .range-btn{ border-radius:2px; padding:3px 8px; background:#0A0F15; }
+  .range-btn.active{ background:#123126; }
+  .secondary-chart-wrap{ padding:10px 12px 8px; }
+  svg.chart{ height:220px; }
+  .risk-grid{ margin:0 12px; border-radius:2px; }
+  .risk-pick{ padding:10px 12px; }
+  .risk-stat{ padding:9px 10px; }
+  .risk-verdict{ padding:12px 12px 4px; }
+  .reasoning-log{ padding:8px 12px 12px; font-size:10px; }
+  .risk-verdict .signal-badge{ border-radius:2px; }
+
+  @media (max-width:980px){
+    .grid{ grid-template-columns:1fr; }
+    .col-side{ position:static; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .chart-stage{ height:390px; }
+  }
+  @media (max-width:680px){
+    .app{ padding-left:8px; padding-right:8px; }
+    .topbar, .account-strip{ margin-left:-8px; margin-right:-8px; }
+    .topbar{ padding:7px 10px; flex-wrap:wrap; }
+    .brand .sub, .user-switch input{ display:none; }
+    .account-strip{ overflow-x:auto; grid-template-columns:repeat(4, 145px); }
+    .col-side{ grid-template-columns:1fr; }
+    .chart-stage{ grid-template-columns:minmax(0, 1fr) 65px; height:350px; }
+    .chart-y-axis{ width:65px; }
+    .chart-jump{ right:75px; }
+    .symbol-search .quote-read{ display:none; }
+  }
 </style>
 </head>
 <body>
@@ -235,12 +362,36 @@
   <div class="grid">
     <div class="col-main">
 
+      <div class="panel primary-chart-panel">
+        <div class="panel-head">
+          <h2>Primary Market Chart</h2>
+          <div class="chart-controls" id="rangeControls">
+            <button class="range-btn active" data-range="24h">24H</button>
+            <button class="range-btn" data-range="1w">1W</button>
+            <button class="range-btn" data-range="1m">1M</button>
+            <button class="range-btn" data-range="1y">1Y</button>
+            <button class="range-btn" data-range="all">ALL</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-meta" id="chartHint">Search a symbol to begin collecting local history.</div>
+          <div class="chart-stage" id="priceChartStage">
+            <div class="chart-scroll" id="priceChartScroll">
+              <svg class="market-chart" id="priceChart" height="430"></svg>
+            </div>
+            <svg class="chart-y-axis" id="priceYAxis" viewBox="0 0 78 430" preserveAspectRatio="none"></svg>
+            <button class="chart-jump" id="jumpToLiveBtn" type="button">JUMP TO LIVE →</button>
+          </div>
+          <div class="chart-legend" id="chartLegend"></div>
+        </div>
+      </div>
+
       <div class="panel">
         <div class="panel-head">
           <h2>Trader Performance</h2>
           <span class="hint" id="performanceHint">all trades combined</span>
         </div>
-        <div class="chart-wrap">
+        <div class="secondary-chart-wrap">
           <svg class="chart" id="performanceChart" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
           <div class="chart-legend" id="performanceLegend"></div>
         </div>
@@ -263,24 +414,6 @@
               <tr class="empty-row"><td colspan="6">No open positions yet — buy something below.</td></tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head">
-          <h2>Price History</h2>
-          <div class="chart-controls" id="rangeControls">
-            <button class="range-btn active" data-range="24h">24H</button>
-            <button class="range-btn" data-range="1w">1W</button>
-            <button class="range-btn" data-range="1m">1M</button>
-            <button class="range-btn" data-range="1y">1Y</button>
-            <button class="range-btn" data-range="all">ALL</button>
-          </div>
-        </div>
-        <div class="chart-wrap">
-          <div class="hint" id="chartHint">Search a symbol to begin collecting local history.</div>
-          <svg class="chart" id="priceChart" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
-          <div class="chart-legend" id="chartLegend"></div>
         </div>
       </div>
 
@@ -677,6 +810,45 @@ document.getElementById("rangeControls").addEventListener("click", (e) => {
   if (currentTicker) loadChart(currentTicker);
 });
 
+const priceChartScroll = document.getElementById("priceChartScroll");
+const jumpToLiveBtn = document.getElementById("jumpToLiveBtn");
+
+function chartIsLive(){
+  return priceChartScroll.scrollWidth - priceChartScroll.clientWidth - priceChartScroll.scrollLeft < 36;
+}
+
+function jumpChartToLive(behavior){
+  priceChartScroll.scrollTo({ left: priceChartScroll.scrollWidth, behavior: behavior || "smooth" });
+}
+
+priceChartScroll.addEventListener("scroll", () => {
+  jumpToLiveBtn.classList.toggle("visible", !chartIsLive());
+});
+
+priceChartScroll.addEventListener("wheel", (e) => {
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+  e.preventDefault();
+  priceChartScroll.scrollLeft += e.deltaY;
+}, { passive:false });
+
+let chartDrag = null;
+priceChartScroll.addEventListener("pointerdown", (e) => {
+  chartDrag = { x:e.clientX, left:priceChartScroll.scrollLeft };
+  priceChartScroll.classList.add("dragging");
+  priceChartScroll.setPointerCapture(e.pointerId);
+});
+priceChartScroll.addEventListener("pointermove", (e) => {
+  if (!chartDrag) return;
+  priceChartScroll.scrollLeft = chartDrag.left - (e.clientX - chartDrag.x);
+});
+function endChartDrag(){
+  chartDrag = null;
+  priceChartScroll.classList.remove("dragging");
+}
+priceChartScroll.addEventListener("pointerup", endChartDrag);
+priceChartScroll.addEventListener("pointercancel", endChartDrag);
+jumpToLiveBtn.addEventListener("click", () => jumpChartToLive("smooth"));
+
 async function refreshLiveQuote(ticker, force){
   currentTicker = ticker;
   try {
@@ -715,38 +887,86 @@ async function loadChart(ticker){
   currentTicker = ticker.toUpperCase();
   document.getElementById("chartHint").textContent = `${currentTicker} · ${currentRange.toUpperCase()} · locally sampled history`;
   const svg = document.getElementById("priceChart");
+  const yAxis = document.getElementById("priceYAxis");
+  const renderKey = `${currentTicker}:${currentRange}`;
+  const sameSeries = svg.dataset.renderKey === renderKey;
+  const stayLive = !sameSeries || chartIsLive();
+  const previousScroll = priceChartScroll.scrollLeft;
   try {
     const data = await api(`/chart/${currentTicker}?range=${currentRange}`);
     const chartPoints = data.points || [];
     if (!chartPoints.length){
-      svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">No samples yet. Open or refresh ${currentTicker} to store the first one.</text>`;
+      const viewport = Math.max(priceChartScroll.clientWidth, 500);
+      svg.setAttribute("width", viewport);
+      svg.setAttribute("viewBox", `0 0 ${viewport} 430`);
+      svg.innerHTML = `<text x="${viewport/2}" y="210" text-anchor="middle" class="chart-axis-label" font-size="12">No samples yet. Open or refresh ${currentTicker} to store the first one.</text>`;
+      yAxis.innerHTML = "";
       document.getElementById("chartLegend").innerHTML = "";
       return;
     }
     const values = chartPoints.flatMap(p => data.multi_line ? [p.close, p.high, p.low] : [p.close]);
-    const min = Math.min(...values), max = Math.max(...values);
-    const w = 600, h = 220, pad = 24;
-    const xStep = chartPoints.length > 1 ? (w - pad*2) / (chartPoints.length - 1) : 0;
-    const yFor = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
+    const rawMin = Math.min(...values), rawMax = Math.max(...values);
+    const priceSpan = rawMax - rawMin || Math.max(Math.abs(rawMax) * .01, 1);
+    const min = rawMin - priceSpan * .08;
+    const max = rawMax + priceSpan * .08;
+    const viewport = Math.max(priceChartScroll.clientWidth, 420);
+    const h = 430, top = 18, bottom = 38;
+    const plotHeight = h - top - bottom;
+    const pointSpacing = currentRange === "24h" ? 12 : currentRange === "1w" ? 24 : 34;
+    const historyWidth = Math.max(viewport * .58, 28 + Math.max(0, chartPoints.length - 1) * pointSpacing);
+    const w = Math.ceil(historyWidth + viewport / 2);
+    const xFor = i => chartPoints.length === 1 ? historyWidth : 24 + i * ((historyWidth - 24) / (chartPoints.length - 1));
+    const yFor = (v) => top + ((max - v) / (max - min)) * plotHeight;
+    svg.setAttribute("width", w);
+    svg.setAttribute("height", h);
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     const polyline = (key, color) => {
-      const coords = chartPoints.map((p,i) => `${pad + i*xStep},${yFor(p[key])}`).join(" ");
-      if (chartPoints.length === 1) return `<circle cx="${pad}" cy="${yFor(chartPoints[0][key])}" r="4" fill="${color}" />`;
-      return `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`;
+      const coords = chartPoints.map((p,i) => `${xFor(i)},${yFor(p[key])}`).join(" ");
+      if (chartPoints.length === 1) return `<circle cx="${xFor(0)}" cy="${yFor(chartPoints[0][key])}" r="4" fill="${color}" />`;
+      return `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />`;
     };
     const closeUp = chartPoints[chartPoints.length-1].close >= chartPoints[0].close;
     const closeColor = closeUp ? "var(--green)" : "var(--red)";
     const lines = data.multi_line
       ? polyline("close", "var(--green)") + polyline("high", "var(--amber)") + polyline("low", "var(--red)")
       : polyline("close", closeColor);
-    const startLabel = new Date(chartPoints[0].timestamp).toLocaleString();
-    const endLabel = new Date(chartPoints[chartPoints.length-1].timestamp).toLocaleString();
-
-    svg.innerHTML = `${lines}
-      <text x="${pad}" y="14" class="chart-axis-label">${money(max)}</text>
-      <text x="${pad}" y="${h-8}" class="chart-axis-label">${money(min)}</text>
-      <text x="${w-pad}" y="14" text-anchor="end" class="chart-axis-label">${endLabel}</text>
-      <text x="${pad}" y="${h-pad+18}" class="chart-axis-label">${startLabel}</text>
-    `;
+    const gridCount = 5;
+    const horizontalGrid = Array.from({length:gridCount}, (_,i) => {
+      const y = top + i * plotHeight / (gridCount - 1);
+      return `<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="#1A2430" stroke-width="1" />`;
+    }).join("");
+    const labelEvery = Math.max(1, Math.ceil(chartPoints.length / Math.max(4, historyWidth / 150)));
+    const timeGrid = chartPoints.map((p,i) => {
+      if (i % labelEvery !== 0 && i !== chartPoints.length - 1) return "";
+      const x = xFor(i);
+      const label = new Date(p.timestamp).toLocaleString(undefined, currentRange === "24h"
+        ? {hour:"2-digit", minute:"2-digit"}
+        : {month:"short", day:"numeric", year:currentRange === "1y" || currentRange === "all" ? "2-digit" : undefined});
+      return `<line x1="${x}" y1="${top}" x2="${x}" y2="${h-bottom}" stroke="#141D27" stroke-width="1" />
+        <text x="${x}" y="${h-13}" text-anchor="middle" class="chart-axis-label">${label}</text>`;
+    }).join("");
+    const latest = Number(chartPoints[chartPoints.length-1].close);
+    const latestY = yFor(latest);
+    const latestX = xFor(chartPoints.length-1);
+    svg.innerHTML = `${horizontalGrid}${timeGrid}
+      <line x1="0" y1="${h-bottom}" x2="${w}" y2="${h-bottom}" stroke="#354254" stroke-width="1" />
+      ${lines}
+      <line x1="${latestX}" y1="${top}" x2="${latestX}" y2="${h-bottom}" stroke="#506078" stroke-width="1" stroke-dasharray="3 5" />
+      <circle cx="${latestX}" cy="${latestY}" r="3.5" fill="${closeColor}" />
+      <text x="${latestX-8}" y="${top+12}" text-anchor="end" class="chart-axis-label">NOW</text>`;
+    yAxis.innerHTML = Array.from({length:gridCount}, (_,i) => {
+      const value = max - i * (max-min) / (gridCount-1);
+      const y = top + i * plotHeight / (gridCount-1);
+      return `<line x1="0" y1="${y}" x2="6" y2="${y}" stroke="#56667A" />
+        <text x="10" y="${y+3}" class="chart-axis-label">${money(value)}</text>`;
+    }).join("") + `<rect x="0" y="${Math.max(3, latestY-10)}" width="78" height="20" fill="${closeUp ? '#075C40' : '#6B242E'}" />
+      <text x="7" y="${Math.max(16, latestY+4)}" fill="#F4F8FC" font-family="var(--mono)" font-size="10">${money(latest)}</text>`;
+    svg.dataset.renderKey = renderKey;
+    requestAnimationFrame(() => {
+      if (stayLive) jumpChartToLive("auto");
+      else priceChartScroll.scrollLeft = previousScroll;
+      jumpToLiveBtn.classList.toggle("visible", !chartIsLive());
+    });
     document.getElementById("chartLegend").innerHTML = data.multi_line
       ? `<span><i class="legend-dot" style="background:var(--green)"></i>Close</span>
          <span><i class="legend-dot" style="background:var(--amber)"></i>High</span>
@@ -755,7 +975,11 @@ async function loadChart(ticker){
          <span>Session high ${money(Math.max(...chartPoints.map(p => p.high)))}</span>
          <span>Session low ${money(Math.min(...chartPoints.map(p => p.low)))}</span>`;
   } catch(e){
-    svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">${e.message}</text>`;
+    const viewport = Math.max(priceChartScroll.clientWidth, 500);
+    svg.setAttribute("width", viewport);
+    svg.setAttribute("viewBox", `0 0 ${viewport} 430`);
+    svg.innerHTML = `<text x="${viewport/2}" y="210" text-anchor="middle" class="chart-axis-label" font-size="12">${e.message}</text>`;
+    yAxis.innerHTML = "";
   }
 }
 
