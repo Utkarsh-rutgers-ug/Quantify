@@ -436,9 +436,34 @@
         </div>
       </div>
 
+      <div class="panel">
+        <div class="panel-head"><h2>Market Briefing</h2><span class="hint">hourly · saved locally</span></div>
+        <div class="panel-body">
+          <div class="ticket-row"><select id="briefingSelect" aria-label="Saved briefing" style="flex:1;min-width:0"></select><button class="btn btn-small" id="briefingReload">Reload saved</button></div>
+          <p class="hint">AI interpretation — check the source evidence below.</p>
+          <p id="briefingStatus" class="hint" role="status">Loading briefings…</p>
+          <div id="briefingReport" style="white-space:pre-wrap;line-height:1.65"></div>
+          <details style="margin-top:14px"><summary>Sources and quote timestamps</summary><div id="briefingEvidence" style="font-size:12px;line-height:1.6;overflow-wrap:anywhere"></div></details>
+        </div>
+      </div>
+
     </div>
 
     <div class="col-side">
+      <div class="panel">
+        <div class="panel-head"><h2>Ask Quantify</h2><span class="hint">local AI</span></div>
+        <div class="panel-body">
+          <p class="hint">Uses the selected trader’s paper positions, cash and 20 latest trades, plus saved news. Read-only; prices may be cached.</p>
+          <div id="assistantConversation" aria-live="polite" style="max-height:360px;overflow:auto;white-space:pre-wrap;line-height:1.6;font-size:13px"></div>
+          <form id="assistantForm">
+            <label for="assistantMessage">Question</label>
+            <textarea id="assistantMessage" maxlength="2000" required rows="3" placeholder="What changed for QQQ, and what is uncertain?" style="width:100%;box-sizing:border-box;margin:8px 0;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:10px;font:inherit"></textarea>
+            <button class="btn btn-small" id="assistantSend" type="submit">Send</button>
+          </form>
+          <p class="hint">Chat clears on reload or trader change. Briefings stay saved.</p>
+        </div>
+      </div>
+
 
       <div class="panel">
         <div class="panel-head">
@@ -498,16 +523,23 @@ let currentTicker = null;
 let tradeSide = "BUY";
 let currentRange = "24h";
 let quoteRefreshTimer = null;
+let ticketQuote = null;
+let ticketSummaryRequest = 0;
 
 // ---------- helpers ----------
 function money(n){
+  if (n == null || !Number.isFinite(Number(n))) return "—";
   const v = Number(n);
   const sign = v < 0 ? "-" : "";
   return sign + "$" + Math.abs(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 function pct(n){
+  if (n == null || !Number.isFinite(Number(n))) return "—";
   const v = Number(n);
   return (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+function escapeHTML(value){
+  return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function cls(n){ return Number(n) > 0 ? "up" : Number(n) < 0 ? "down" : "flat"; }
 
@@ -522,7 +554,7 @@ function showToast(msg, type){
 async function api(path, opts){
   const res = await fetch(API + path, Object.assign({headers:{"Content-Type":"application/json"}}, opts || {}));
   let body;
-  try { body = await res.json(); } catch(e){ body = {}; }
+  try { body = await res.json(); } catch(e){ throw new Error("The server returned an invalid response. Refresh or try again."); }
   if (!res.ok) throw new Error(body.error || ("Request failed: " + res.status));
   return body;
 }
@@ -564,8 +596,7 @@ document.getElementById("createUserBtn").addEventListener("click", async () => {
     document.getElementById("newUserName").value = "";
     await loadUsers();
     document.getElementById("userSelect").value = user.id;
-    currentUserId = user.id;
-    refreshAccount();
+    document.getElementById("userSelect").dispatchEvent(new Event("change"));
     showToast(`Created trader "${user.name}" with $100,000 virtual cash`, "success");
   } catch(e){
     showToast(e.message, "error");
@@ -580,14 +611,16 @@ document.getElementById("userSelect").addEventListener("change", (e) => {
 // ---------- account summary + positions ----------
 async function refreshAccount(){
   if (!currentUserId) return;
+  const userId = currentUserId;
   try {
-    const summary = await api(`/account/${currentUserId}`);
+    const summary = await api(`/account/${userId}`);
+    if (userId !== currentUserId) return;
     document.getElementById("cashBalance").textContent = money(summary.cash_balance);
     document.getElementById("investedValue").textContent = money(summary.invested_value);
     document.getElementById("totalEquity").textContent = money(summary.total_equity);
 
-    const startingBalance = 100000.0; // matches services.STARTING_BALANCE default
-    const totalPnl = summary.total_equity - startingBalance;
+    const startingBalance = summary.starting_balance;
+    const totalPnl = summary.total_equity == null ? NaN : summary.total_equity - startingBalance;
     const totalPnlPct = (totalPnl / startingBalance) * 100;
     const pnlEl = document.getElementById("totalPnl");
     pnlEl.textContent = money(totalPnl);
@@ -606,8 +639,10 @@ async function refreshAccount(){
 async function refreshPerformance(){
   if (!currentUserId) return;
   const svg = document.getElementById("performanceChart");
+  const userId = currentUserId;
   try {
-    const data = await api(`/performance?user_id=${currentUserId}`);
+    const data = await api(`/performance?user_id=${userId}`);
+    if (userId !== currentUserId) return;
     const points = data.curve || [];
     if (!points.length){
       svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">Place a trade to begin the combined performance graph.</text>`;
@@ -617,7 +652,8 @@ async function refreshPerformance(){
     }
 
     const equities = points.map(p => Number(p.equity));
-    const min = Math.min(...equities), max = Math.max(...equities);
+    let min = Infinity, max = -Infinity;
+    for (const value of equities) { min = Math.min(min, value); max = Math.max(max, value); }
     const w = 600, h = 220, pad = 24;
     const xStep = points.length > 1 ? (w - pad*2) / (points.length - 1) : 0;
     const yFor = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
@@ -643,7 +679,7 @@ async function refreshPerformance(){
        <span>Current ${money(data.summary.equity_end)}</span>
        <span class="${cls(gain)}">P/L ${money(gain)}</span>`;
   } catch(e){
-    svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">${e.message}</text>`;
+    svg.innerHTML = `<text x="300" y="110" text-anchor="middle" class="chart-axis-label" font-size="13">${escapeHTML(e.message)}</text>`;
   }
 }
 
@@ -655,8 +691,8 @@ function renderPositions(positions){
     return;
   }
   body.innerHTML = positions.map(p => `
-    <tr style="cursor:pointer" onclick="selectTickerFromPosition('${p.ticker}')">
-      <td class="ticker">${p.ticker}</td>
+    <tr style="cursor:pointer" data-ticker="${escapeHTML(p.ticker)}">
+      <td class="ticker">${escapeHTML(p.ticker)}</td>
       <td class="right">${p.quantity}</td>
       <td class="right">${money(p.avg_cost)}</td>
       <td class="right">${money(p.last_price)}</td>
@@ -666,6 +702,10 @@ function renderPositions(positions){
   `).join("");
 }
 
+document.getElementById("positionsBody").addEventListener("click", event => {
+  const row = event.target.closest("tr[data-ticker]");
+  if (row) selectTickerFromPosition(row.dataset.ticker);
+});
 function selectTickerFromPosition(ticker){
   document.getElementById("ticketTicker").value = ticker;
   document.getElementById("riskTicker").value = ticker;
@@ -679,8 +719,10 @@ function selectTickerFromPosition(ticker){
 // ---------- trade history ----------
 async function refreshTrades(){
   if (!currentUserId) return;
+  const userId = currentUserId;
   try {
-    const data = await api(`/trades?user_id=${currentUserId}`);
+    const data = await api(`/trades?user_id=${userId}`);
+    if (userId !== currentUserId) return;
     const rows = (data.trades || []).slice().reverse();
     const body = document.getElementById("tradesBody");
     if (!rows.length){
@@ -690,8 +732,8 @@ async function refreshTrades(){
     body.innerHTML = rows.map(t => `
       <tr>
         <td>${new Date(t.timestamp).toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
-        <td class="ticker">${t.ticker}</td>
-        <td><span class="pill ${t.side === 'BUY' ? 'pill-buy' : 'pill-sell'}">${t.side}</span></td>
+        <td class="ticker">${escapeHTML(t.ticker)}</td>
+        <td><span class="pill ${t.side === 'BUY' ? 'pill-buy' : 'pill-sell'}">${escapeHTML(t.side)}</span></td>
         <td class="right">${t.quantity}</td>
         <td class="right">${money(t.price)}</td>
         <td class="right ${t.realized_pnl != null ? cls(t.realized_pnl) : 'flat'}">${t.realized_pnl != null ? money(t.realized_pnl) : '—'}</td>
@@ -710,24 +752,27 @@ document.getElementById("sideToggle").addEventListener("click", (e) => {
   document.querySelectorAll("#sideToggle button").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   document.getElementById("submitTradeBtn").className = tradeSide === "BUY" ? "btn btn-primary" : "btn btn-sell";
-  document.getElementById("submitTradeBtn").textContent = tradeSide === "BUY" ? "Place simulated trade" : "Place simulated trade";
+  document.getElementById("submitTradeBtn").textContent = "Place simulated trade";
   refreshTicketSummary();
 });
 
-document.getElementById("ticketTicker").addEventListener("input", refreshTicketSummary);
+document.getElementById("ticketTicker").addEventListener("change", refreshTicketSummary);
 document.getElementById("ticketQty").addEventListener("input", refreshTicketSummary);
 
 async function refreshTicketSummary(){
+  const requestId = ++ticketSummaryRequest;
   const ticker = document.getElementById("ticketTicker").value.trim().toUpperCase();
   const qty = Number(document.getElementById("ticketQty").value) || 0;
   const summaryEl = document.getElementById("ticketSummary");
   if (!ticker){ summaryEl.textContent = "Enter a ticker to see the latest sampled price."; return; }
   try {
-    const quote = await api(`/quote/${ticker}`);
+    const quote = ticketQuote?.ticker === ticker ? ticketQuote : await api(`/quote/${encodeURIComponent(ticker)}`);
+    if (requestId !== ticketSummaryRequest) return;
+    ticketQuote = quote;
     const total = quote.price * qty;
     summaryEl.innerHTML = `Latest sample <b>${money(quote.price)}</b> &middot; Est. ${tradeSide === 'BUY' ? 'cost' : 'proceeds'}: <b>${money(total)}</b>`;
   } catch(e){
-    summaryEl.textContent = e.message;
+    if (requestId === ticketSummaryRequest) summaryEl.textContent = e.message;
   }
 }
 
@@ -738,8 +783,9 @@ document.getElementById("fetchPriceBtn").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Fetching…";
   try {
-    const res = await api(`/quote/${ticker}`, { method: "POST" });
-    showToast(`Stored ${ticker} at ${money(res.price)}`, "success");
+    const res = await api(`/quote/${encodeURIComponent(ticker)}`, { method: "POST" });
+    ticketQuote = res;
+    showToast(`Stored ${escapeHTML(ticker)} at ${money(res.price)}`, "success");
     currentTicker = ticker;
     document.getElementById("symbolSearch").value = ticker;
     await refreshTicketSummary();
@@ -783,7 +829,7 @@ document.getElementById("symbolSearch").addEventListener("input", (e) => {
     try {
       const data = await api(`/symbols?q=${encodeURIComponent(query)}`);
       document.getElementById("symbolSuggestions").innerHTML = (data.results || [])
-        .map(r => `<option value="${r.symbol}">${r.description || r.type || ""}</option>`).join("");
+        .map(r => `<option value="${escapeHTML(r.symbol)}">${escapeHTML(r.description || r.type || "")}</option>`).join("");
     } catch (_) {}
   }, 300);
 });
@@ -852,15 +898,15 @@ jumpToLiveBtn.addEventListener("click", () => jumpChartToLive("smooth"));
 async function refreshLiveQuote(ticker, force){
   currentTicker = ticker;
   try {
-    const quote = await api(`/quote/${ticker}${force ? "?refresh=1" : ""}`, force ? {method:"POST"} : {});
+    const quote = await api(`/quote/${encodeURIComponent(ticker)}${force ? "?refresh=1" : ""}`, force ? {method:"POST"} : {});
     renderLiveQuote(quote);
     clearInterval(quoteRefreshTimer);
     quoteRefreshTimer = setInterval(async () => {
-      if (!currentTicker) return;
+      if (!currentTicker || document.hidden) return;
       try {
         // Read the newest sample from our database. The backend sampler is
         // responsible for the Finnhub call, avoiding duplicate API requests.
-        const newest = await api(`/quote/${currentTicker}`);
+        const newest = await api(`/quote/${encodeURIComponent(currentTicker)}`);
         renderLiveQuote(newest);
         await loadChart(currentTicker);
         if (currentUserId) await refreshAccount();
@@ -873,11 +919,12 @@ async function refreshLiveQuote(ticker, force){
 }
 
 function renderLiveQuote(quote){
+  if (quote.ticker === document.getElementById("ticketTicker").value.trim().toUpperCase()) ticketQuote = quote;
   const sampledAt = quote.fetched_at
     ? new Date(quote.fetched_at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"})
     : "—";
   document.getElementById("liveQuoteRead").innerHTML =
-    `${quote.ticker || currentTicker} <b class="${cls(quote.change)}">${money(quote.price)}</b> ` +
+    `${escapeHTML(quote.ticker || currentTicker)} <b class="${cls(quote.change)}">${money(quote.price)}</b> ` +
     `<span class="${cls(quote.change_percent)}">${pct(quote.change_percent || 0)}</span> ` +
     `<span class="flat">AUTO 30s · ${sampledAt}</span>`;
 }
@@ -885,27 +932,31 @@ function renderLiveQuote(quote){
 async function loadChart(ticker){
   if (!ticker) return;
   currentTicker = ticker.toUpperCase();
-  document.getElementById("chartHint").textContent = `${currentTicker} · ${currentRange.toUpperCase()} · locally sampled history`;
+  document.getElementById("chartHint").textContent = `${escapeHTML(currentTicker)} · ${currentRange.toUpperCase()} · locally sampled history`;
   const svg = document.getElementById("priceChart");
   const yAxis = document.getElementById("priceYAxis");
-  const renderKey = `${currentTicker}:${currentRange}`;
+  const renderKey = `${escapeHTML(currentTicker)}:${currentRange}`;
   const sameSeries = svg.dataset.renderKey === renderKey;
   const stayLive = !sameSeries || chartIsLive();
   const previousScroll = priceChartScroll.scrollLeft;
   try {
-    const data = await api(`/chart/${currentTicker}?range=${currentRange}`);
+    const data = await api(`/chart/${encodeURIComponent(currentTicker)}?range=${currentRange}`);
+    if (renderKey !== `${escapeHTML(currentTicker)}:${currentRange}`) return;
     const chartPoints = data.points || [];
     if (!chartPoints.length){
       const viewport = Math.max(priceChartScroll.clientWidth, 500);
       svg.setAttribute("width", viewport);
       svg.setAttribute("viewBox", `0 0 ${viewport} 430`);
-      svg.innerHTML = `<text x="${viewport/2}" y="210" text-anchor="middle" class="chart-axis-label" font-size="12">No samples yet. Open or refresh ${currentTicker} to store the first one.</text>`;
+      svg.innerHTML = `<text x="${viewport/2}" y="210" text-anchor="middle" class="chart-axis-label" font-size="12">No samples yet. Open or refresh ${escapeHTML(currentTicker)} to store the first one.</text>`;
       yAxis.innerHTML = "";
       document.getElementById("chartLegend").innerHTML = "";
       return;
     }
-    const values = chartPoints.flatMap(p => data.multi_line ? [p.close, p.high, p.low] : [p.close]);
-    const rawMin = Math.min(...values), rawMax = Math.max(...values);
+    let rawMin = Infinity, rawMax = -Infinity;
+    for (const point of chartPoints) {
+      rawMin = Math.min(rawMin, point.close, data.multi_line ? point.low : point.close);
+      rawMax = Math.max(rawMax, point.close, data.multi_line ? point.high : point.close);
+    }
     const priceSpan = rawMax - rawMin || Math.max(Math.abs(rawMax) * .01, 1);
     const min = rawMin - priceSpan * .08;
     const max = rawMax + priceSpan * .08;
@@ -978,7 +1029,7 @@ async function loadChart(ticker){
     const viewport = Math.max(priceChartScroll.clientWidth, 500);
     svg.setAttribute("width", viewport);
     svg.setAttribute("viewBox", `0 0 ${viewport} 430`);
-    svg.innerHTML = `<text x="${viewport/2}" y="210" text-anchor="middle" class="chart-axis-label" font-size="12">${e.message}</text>`;
+    svg.innerHTML = `<text x="${viewport/2}" y="210" text-anchor="middle" class="chart-axis-label" font-size="12">${escapeHTML(e.message)}</text>`;
     yAxis.innerHTML = "";
   }
 }
@@ -994,18 +1045,21 @@ document.getElementById("riskTicker").addEventListener("keydown", (e) => {
 
 async function loadRisk(ticker){
   const body = document.getElementById("riskBody");
-  body.innerHTML = `<div class="loading-text">Computing risk read for ${ticker}…</div>`;
+  body.innerHTML = `<div class="loading-text">Computing risk read for ${escapeHTML(ticker)}…</div>`;
   try {
-    const a = await api(`/risk/${ticker}`);
+    const a = await api(`/risk/${encodeURIComponent(ticker)}`);
+    if (!a || typeof a.risk_level !== "string") {
+      throw new Error("Risk assessment unavailable. The server returned incomplete data.");
+    }
     const riskPillClass = "pill-" + a.risk_level.toLowerCase();
     const signalColor = a.signal === "BUY" ? "var(--green)" : a.signal === "SELL" ? "var(--red)" : "var(--muted)";
     const signalBg = a.signal === "BUY" ? "var(--green-dim)" : a.signal === "SELL" ? "var(--red-dim)" : "#252B35";
 
     body.innerHTML = `
       <div class="risk-verdict">
-        <span class="signal-badge" style="color:${signalColor};background:${signalBg}">${a.signal}</span>
-        <span class="pill ${riskPillClass}">${a.risk_level} risk</span>
-        <span style="margin-left:auto;font-family:var(--mono);color:var(--muted);font-size:12px">as of ${a.as_of}</span>
+        <span class="signal-badge" style="color:${signalColor};background:${signalBg}">${escapeHTML(a.signal)}</span>
+        <span class="pill ${riskPillClass}">${escapeHTML(a.risk_level)} risk</span>
+        <span style="margin-left:auto;font-family:var(--mono);color:var(--muted);font-size:12px">as of ${escapeHTML(a.as_of)}</span>
       </div>
       <div class="risk-grid">
         <div class="risk-stat"><div class="label">Last Close</div><div class="value">${money(a.last_close)}</div></div>
@@ -1016,11 +1070,11 @@ async function loadRisk(ticker){
         <div class="risk-stat"><div class="label">Avg True Range</div><div class="value">${a.avg_true_range_pct.toFixed(2)}%</div></div>
       </div>
       <div class="reasoning-log">
-        ${a.reasoning.map(r => `<div class="line"><span class="marker">›</span>${r}</div>`).join("")}
+        ${a.reasoning.map(r => `<div class="line"><span class="marker">›</span>${escapeHTML(r)}</div>`).join("")}
       </div>
     `;
   } catch(e){
-    body.innerHTML = `<div class="risk-empty">${e.message}</div>`;
+    body.innerHTML = `<div class="risk-empty">${escapeHTML(e.message)}</div>`;
   }
 }
 
@@ -1028,5 +1082,6 @@ async function loadRisk(ticker){
 loadUsers();
 </script>
 
+<script src="/static/assistant.js"></script>
 </body>
 </html>

@@ -24,6 +24,12 @@ def create_app():
 
     db.init_app(app)
     app.register_blueprint(api_bp, url_prefix="/api")
+    from news import register_commands
+    register_commands(app)
+    from event_study import register as register_event_study
+    register_event_study(app)
+    from market_assistant import register as register_market_assistant
+    register_market_assistant(app)
 
     @app.route("/")
     def index():

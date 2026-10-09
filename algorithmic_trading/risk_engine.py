@@ -16,7 +16,6 @@ number it outputs can be traced back to a formula. It is NOT investment
 advice -- it's a toy heuristic for the simulation.
 """
 from dataclasses import dataclass, asdict
-from typing import Optional
 import math
 import pandas as pd
 
@@ -40,10 +39,6 @@ class RiskAssessment:
         return asdict(self)
 
 
-def _annualized_vol(daily_returns: pd.Series) -> float:
-    return float(daily_returns.std() * math.sqrt(252) * 100)
-
-
 def _max_drawdown_pct(close: pd.Series) -> float:
     running_max = close.cummax()
     drawdown = (close - running_max) / running_max
@@ -60,14 +55,24 @@ def assess(df: pd.DataFrame, ticker: str, lookback_days: int = 20) -> RiskAssess
     if df is None or df.empty:
         raise ValueError(f"No price history available for {ticker}")
 
+    required = max(lookback_days + 1, 21)
+    if len(df) < required:
+        raise ValueError(
+            f"Not enough daily price history for {ticker}: {len(df)} of {required} "
+            "observations available. Import historical daily prices or let history accumulate. "
+            "A current quote alone cannot support a risk assessment."
+        )
     df = df.sort_index()
-    window = df.tail(max(lookback_days, 21))  # need >=21 rows for a 20d MA
+    window = df.tail(required)
+    prices = window[["close", "high", "low"]]
+    if not prices.map(lambda value: isinstance(value, (int, float)) and math.isfinite(value) and value > 0).all().all():
+        raise ValueError(f"Invalid price history for {ticker}: prices must be finite and positive")
 
     close = window["close"]
     daily_returns = close.pct_change().dropna()
 
     daily_vol_pct = float(daily_returns.std() * 100) if len(daily_returns) > 1 else 0.0
-    ann_vol_pct = _annualized_vol(daily_returns) if len(daily_returns) > 1 else 0.0
+    ann_vol_pct = daily_vol_pct * math.sqrt(252)
 
     true_range_pct = ((window["high"] - window["low"]) / window["close"] * 100)
     atr_pct = float(true_range_pct.mean())

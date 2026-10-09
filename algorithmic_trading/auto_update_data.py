@@ -4,7 +4,7 @@ Optional background scheduler that periodically refreshes cached price
 history for a list of tickers. Run this as a separate process if you want
 prices to stay fresh without manually calling POST /api/prices/<ticker>.
 """
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.blocking import BlockingScheduler
 import services
 from app import app
 
@@ -15,24 +15,25 @@ def update_historical_data(tickers):
             try:
                 inserted = services.fetch_and_store_prices(ticker, output_size="compact")
                 print(f"Updated {ticker}: {inserted} new rows.")
-            except Exception as e:
-                print(f"Error updating data for {ticker}: {e}")
+            except Exception:
+                services.db.session.rollback()
+                app.logger.warning("Historical update failed for %s", ticker)
 
 
 def schedule_updates(tickers, interval_hours=24):
-    scheduler = BackgroundScheduler()
+    scheduler = BlockingScheduler()
     scheduler.add_job(
-        func=lambda: update_historical_data(tickers),
+        func=update_historical_data,
+        args=[tickers],
         trigger="interval",
         hours=interval_hours,
     )
-    scheduler.start()
     print("Scheduler started. Press Ctrl+C to exit.")
     try:
-        while True:
-            pass
+        scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        scheduler.shutdown()
+        if scheduler.running:
+            scheduler.shutdown()
         print("Scheduler stopped.")
 
 

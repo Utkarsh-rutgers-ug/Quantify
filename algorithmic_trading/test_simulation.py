@@ -4,7 +4,6 @@ End-to-end smoke test for the paper-trading simulation, using synthetic
 price data (no network/API key required) so it can run anywhere.
 
 Run with: python test_simulation.py
-d8s3d9hr01qlj6ffuks0d8s3d9hr01qlj6ffuksg
 """
 import os
 import sys

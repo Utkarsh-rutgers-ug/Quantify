@@ -1,81 +1,160 @@
-# Quantify — Paper Trading Simulator
+# Application development
 
-A local Flask app that simulates stock trading with virtual money. Finnhub
-quotes are sampled into the local SQLite database, creating private price
-history over time without relying on a paid candle-history endpoint. A local,
-rule-based risk advisor operates on the history available in the database.
+This directory contains the Flask application, collection worker, models, and
+browser interface. Commands below assume a virtual environment was created at
+the repository root as described in the [main README](../README.md).
 
-## Setup
+## Code layout
 
-1. Create a virtual environment and install dependencies:
-   ```
-   python -m venv .venv
-   source .venv/bin/activate   # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+| File | Responsibility |
+|---|---|
+| `app.py` | Application factory, configuration, route registration, and table creation |
+| `models.py` | Paper accounts, trades, positions, price history, and news records |
+| `services.py` | Trading operations, valuations, historical data, and performance replay |
+| `routes.py` | Trading, market-data, news, and risk API endpoints |
+| `finnhub_api.py`, `alpha_vantage_api.py` | Provider clients |
+| `quote_sampler.py` | Quote sampling and hourly briefing scheduling |
+| `news.py` | RSS/Atom parsing, source validation, and deduplication |
+| `news_model.py` | Local news-topic model training and inference |
+| `market_assistant.py` | Stored briefings, local Qwen requests, and portfolio context |
+| `event_study.py` | Timestamped price imports and news-response measurements |
+| `risk_engine.py` | Price-based risk heuristics |
+| `chart_builder.py` | Chart time buckets |
+| `static/index.html` | Dashboard layout and trading interface |
+| `static/assistant.js` | Briefing selection and chat interface |
+| `run.py`, `worker.py`, `wsgi.py` | Local application, collection-only, and web-only entrypoints |
 
-2. Copy `.env.example` to `.env` and add your Finnhub key:
-   ```
-   cp .env.example .env
-   ```
+## Configuration
 
-3. Export the variables (or use `python-dotenv` / your shell's `.env` support)
-   and run:
-   ```
-   python run.py
-   ```
+Copy `.env.example` to `.env` in this directory. The application reads it on
+startup.
 
-The app runs at `http://127.0.0.1:5001`. Port 5000 is commonly occupied by
-macOS AirPlay Receiver; change `APP_PORT` in `.env` if needed.
+| Variable | Default or purpose |
+|---|---|
+| `FINNHUB_API_KEY` | Required for quote retrieval and symbol search |
+| `ALPHA_VANTAGE_API_KEY` | Optional historical importer; availability depends on provider access |
+| `DATABASE_URL` | Defaults to `sqlite:///trading.db` in Flask's instance directory |
+| `APP_PORT` | `5001` |
+| `QUOTE_SAMPLE_INTERVAL_SECONDS` | `30`, with a minimum of 30 |
+| `QUOTE_SAMPLE_MAX_PER_CYCLE` | `25`; larger watchlists rotate between cycles |
+| `QUANTIFY_CHAT_MODEL` | `qwen3:8b`; must be installed in local Ollama |
 
-## Security note
+The hourly briefing includes up to 12 recently collected headlines and quotes
+for up to 25 watched symbols. This is bounded coverage, not a comprehensive news
+search. Qwen runs at `127.0.0.1:11434`, with an 8,192-token context and bounded
+output. The news classifier runs separately without Ollama.
 
-Never put a real API key in a tracked file. Keep it in `.env`, which is
-already ignored by Git.
+`wsgi.py` and the root `Procfile` run only the web application. A hosted setup
+also needs a collection worker, access to its model service, persistent storage,
+and user authentication. Do not run multiple collection processes unnecessarily.
 
-## API overview
+## Train the news classifier
 
-| Method | Path | Description |
+Download the publisher's training and validation CSV files from
+[Twitter Financial News Topic](https://huggingface.co/datasets/zeroshot/twitter-financial-news-topic).
+Review the dataset card and preserve its license information. The publisher
+lists MIT; underlying content rights should be reviewed before redistribution.
+
+From the repository root, place the files in an ignored local directory:
+
+```bash
+mkdir -p algorithmic_trading/local_data/news-topics
+curl -fL https://huggingface.co/datasets/zeroshot/twitter-financial-news-topic/resolve/main/topic_train.csv -o algorithmic_trading/local_data/news-topics/topic_train.csv
+curl -fL https://huggingface.co/datasets/zeroshot/twitter-financial-news-topic/resolve/main/topic_valid.csv -o algorithmic_trading/local_data/news-topics/topic_valid.csv
+curl -fL https://huggingface.co/datasets/zeroshot/twitter-financial-news-topic/raw/main/README.md -o algorithmic_trading/local_data/news-topics/DATASET_CARD.md
+.venv/bin/python algorithmic_trading/news_model.py algorithmic_trading/local_data/news-topics/topic_train.csv algorithmic_trading/local_data/news-topics/topic_valid.csv
+```
+
+Training writes `instance/news_topic_model.json` and
+`instance/news_topic_model.metrics.json` beside the application. Both are ignored
+by Git. The saved evaluation record includes hashes of the dataset files used
+for the reported run; upstream files may change.
+
+The trainer removes normalized duplicates and conflicting training labels,
+limits the vocabulary to 20,000 features, and learns weights for 20 topics.
+Inputs with insufficient known vocabulary are left unclassified. Scores are not
+calibrated probabilities. The validation split is not chronological, near-duplicate
+stories may remain, and performance on current BBC/CNBC headlines is unmeasured.
+
+## News and event studies
+
+From the application directory, collect a feed snapshot or this hour's briefing:
+
+```bash
+cd algorithmic_trading
+../.venv/bin/python -m flask --app app news-fetch
+../.venv/bin/python -m flask --app app briefing-refresh
+```
+
+The briefing command skips an already claimed UTC hour. Collection failures and
+unavailable Ollama are recorded instead of being presented as a complete report.
+
+Find an article ID through `/api/news`, then link it to a reviewed company and
+event category. Replace `123` with an existing article ID:
+
+```bash
+../.venv/bin/python -m flask --app app event-link 123 MRK --category guidance
+../.venv/bin/python -m flask --app app event-prices-import /path/to/prices.csv --source provider-name
+../.venv/bin/python -m flask --app app event-report --ticker MRK --category guidance --source provider-name --benchmark SPY
+```
+
+Price files use `ticker,timestamp,price` columns. Timestamps must include a timezone.
+Include both the stock and benchmark. Use actual observation times or minute-bar
+end times, not download times. Use a consistent price-adjustment convention.
+Imports are limited to 100,000 rows and reject conflicting observations atomically.
+
+The report measures returns at 1, 5, 15, and 60 elapsed minutes, subtracts benchmark
+returns, and finds the first observed move beyond a configurable threshold
+(default 1 percentage point). Baseline and endpoint prices must be recent enough;
+gaps invalidate response-time estimates. Closed sessions are not interpreted as
+slow reactions. Daily and multi-session response measurements are not implemented.
+
+Monthly summaries include coverage, response rates, and median response time among
+responders. These are descriptive research measurements, not causal findings or
+trading signals. Later observations are outcome labels and must not become
+prediction-time features.
+
+## Assistant and account context
+
+The chat API takes the selected `user_id`, a message, and up to six history
+messages. It reads that paper account's cash, up to 20 open positions, and 20
+recent trades. Missing prices remain unavailable rather than becoming zero.
+Private account records are supplied only to the local model for that response;
+they are not written into shared briefings or used to train the news classifier.
+
+The selected database username is used for chat. Shared briefings do not have a
+personal greeting. The model has no tools for placing orders. Trader selection
+is not authentication.
+
+## Main endpoints
+
+| Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/users` | Create a user + virtual cash account (default $100,000) |
-| GET | `/api/account/<user_id>` | Cash balance, positions, total equity |
-| GET/POST | `/api/quote/<ticker>` | Read or refresh a Finnhub quote and store a local sample |
-| GET | `/api/symbols?q=` | Search market symbols |
-| GET | `/api/chart/<ticker>?range=24h` | Read locally sampled 24h/1w/1m/1y/all chart data |
-| POST | `/api/trades` | Execute a simulated BUY/SELL against virtual cash |
-| GET | `/api/trades?user_id=` | Trade history |
-| GET | `/api/positions?user_id=` | Current holdings with live valuation |
-| GET | `/api/performance?user_id=` | Equity curve + gain/loss summary |
-| GET | `/api/risk/<ticker>` | Local risk/volatility/signal assessment for one ticker |
-| GET | `/api/risk/portfolio?user_id=` | Risk rollup across a user's whole portfolio |
+| POST | `/api/users` | Create a paper account |
+| GET | `/api/account/<user_id>` | Cash, positions, and cached valuation |
+| GET/POST | `/api/quote/<ticker>` | Read or refresh a quote |
+| GET | `/api/chart/<ticker>?range=24h` | Stored price chart |
+| POST | `/api/trades` | Place a paper order at a server-held price |
+| GET | `/api/trades?user_id=1` | Selected account's trade history |
+| GET | `/api/performance?user_id=1` | Account equity curve |
+| GET | `/api/risk/<ticker>` | Rule-based risk assessment |
+| GET | `/api/news` | Collected headlines and provenance |
+| GET | `/api/events/<event_id>/response?source=provider-name` | Event response measurements |
+| GET | `/api/assistant/briefings` | Latest 24 saved briefings |
+| POST | `/api/assistant/chat` | Local model response using account and market evidence |
 
-## How the risk advisor works
+## Tests
 
-`risk_engine.py` is pure Python/pandas math over cached price history — no
-external API calls, no black box:
+From this directory, with the virtual environment at the repository root:
 
-- **Volatility**: standard deviation of daily returns, annualized
-- **Average true range**: mean daily high-low range as % of close
-- **Momentum**: 5-day vs 20-day moving average gap
-- **Drawdown**: worst peak-to-trough decline in the lookback window
-- **Risk level** (Low/Medium/High) and a BUY/HOLD/SELL **signal**, each with
-  a plain-English `reasoning` list explaining exactly which numbers drove it
+```bash
+DATABASE_URL=sqlite:///:memory: ../.venv/bin/python -m unittest discover -p 'test_*.py'
+DATABASE_URL=sqlite:///:memory: ../.venv/bin/python test_quote_history.py
+DATABASE_URL=sqlite:///:memory: ../.venv/bin/python test_simulation.py
+```
 
-This is a heuristic for the simulation, not investment advice.
-
-## Local history behavior
-
-- Searching or refreshing a ticker stores a quote immediately.
-- While `python run.py` remains active, watched tickers are sampled every
-  30 seconds by default. Change `QUOTE_SAMPLE_INTERVAL_SECONDS` in `.env`.
-- The open market view checks the local database every 30 seconds and redraws
-  automatically. It does not make a duplicate Finnhub request.
-- Keep `python run.py` running. Closing the terminal/server pauses collection;
-  starting it again resumes all previously watched tickers automatically.
-- Each cycle samples at most 25 tickers by default. Larger watchlists rotate
-  fairly across cycles; adjust `QUOTE_SAMPLE_MAX_PER_CYCLE` cautiously.
-- `24H` shows raw samples, `1W` uses 6-hour buckets, `1M` uses 12-hour
-  buckets, and `1Y`/`ALL` use monthly buckets.
-- `1M`, `1Y`, and `ALL` overlay close/high/low. Longer views initially show
-  only the history collected since you began watching that ticker; no fake
-  backfilled data is generated.
+The tests use isolated databases and mocked providers. They cover account and
+trade validation, quote history, feed parsing, event timing, import rollback,
+assistant account scoping, scheduler entrypoints, and maintenance regressions.
+The two script-based smoke tests are run separately because unittest discovery
+does not execute their `main()` functions.

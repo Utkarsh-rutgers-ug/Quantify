@@ -1,6 +1,7 @@
 """Small, explicit client for the Finnhub quote and symbol-search endpoints."""
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+import math
 import requests
 
 BASE_URL = "https://finnhub.io/api/v1"
@@ -37,19 +38,38 @@ def _get(path: str, token: str, **params):
         response = requests.get(f"{BASE_URL}{path}", params=params, timeout=20)
         response.raise_for_status()
         data = response.json()
-    except requests.RequestException as exc:
-        raise FinnhubError(f"Finnhub request failed: {exc}") from exc
-    except ValueError as exc:
-        raise FinnhubError("Finnhub returned an invalid response.") from exc
+    except requests.Timeout:
+        raise FinnhubError("Finnhub request timed out. Try again later.") from None
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        message = {
+            401: "Finnhub authentication failed. Check your local API key.",
+            403: "Finnhub access denied. Check your key and plan.",
+            429: "Finnhub rate limit reached. Try again later.",
+        }.get(status, "Finnhub service request failed. Try again later.")
+        raise FinnhubError(message) from None
+    except requests.RequestException:
+        # Request exceptions can include the full URL, including the API token.
+        raise FinnhubError("Finnhub connection failed. Try again later.") from None
+    except ValueError:
+        raise FinnhubError("Finnhub returned an invalid response.") from None
     if isinstance(data, dict) and data.get("error"):
-        raise FinnhubError(f"Finnhub error: {data['error']}")
+        raise FinnhubError("Finnhub rejected the request. Check your key, plan, and symbol.")
+    if not isinstance(data, dict):
+        raise FinnhubError("Finnhub returned an invalid response.")
     return data
 
 
 def get_quote(ticker: str, token: str) -> FinnhubQuote:
     ticker = ticker.strip().upper()
     data = _get("/quote", token, symbol=ticker)
-    price = float(data.get("c") or 0)
+    try:
+        numbers = {key: float(data.get(key) or 0) for key in ("c", "o", "h", "l", "pc", "d", "dp", "t")}
+        if not all(math.isfinite(value) for value in numbers.values()):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        raise FinnhubError("Finnhub returned invalid quote values.") from None
+    price = numbers["c"]
     if price <= 0:
         raise FinnhubError(
             f"No quote is available for {ticker}. Check the symbol and your Finnhub plan/key."
@@ -57,13 +77,13 @@ def get_quote(ticker: str, token: str) -> FinnhubQuote:
     return FinnhubQuote(
         ticker=ticker,
         price=price,
-        open=float(data.get("o") or price),
-        high=float(data.get("h") or price),
-        low=float(data.get("l") or price),
-        previous_close=float(data.get("pc") or price),
-        change=float(data.get("d") or 0),
-        change_percent=float(data.get("dp") or 0),
-        provider_timestamp=int(data.get("t") or 0),
+        open=numbers["o"] or price,
+        high=numbers["h"] or price,
+        low=numbers["l"] or price,
+        previous_close=numbers["pc"] or price,
+        change=numbers["d"],
+        change_percent=numbers["dp"],
+        provider_timestamp=int(numbers["t"]),
         fetched_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
 

@@ -54,19 +54,14 @@ def build_chart(samples: Iterable, range_name: str, now: datetime | None = None)
         buckets = {}
         for sample in rows:
             key = _floor_time(_value(sample, "timestamp"), config["bucket"])
-            buckets.setdefault(key, []).append(sample)
-        points = []
-        for key, bucket_rows in sorted(buckets.items()):
-            prices = [float(_value(s, "price")) for s in bucket_rows]
-            highs = [float(_value(s, "high") or _value(s, "price")) for s in bucket_rows]
-            lows = [float(_value(s, "low") or _value(s, "price")) for s in bucket_rows]
-            points.append(
-                {
-                    "timestamp": key.isoformat() + "Z",
-                    "close": prices[-1],
-                    "high": max(max(prices), max(highs)),
-                    "low": min(min(prices), min(lows)),
-                }
-            )
+            price = float(_value(sample, "price"))
+            high = max(price, float(_value(sample, "high") or price))
+            low = min(price, float(_value(sample, "low") or price))
+            bucket = buckets.setdefault(key, {"timestamp": key.isoformat() + "Z",
+                                              "close": price, "high": high, "low": low})
+            bucket["close"] = price
+            bucket["high"] = max(bucket["high"], high)
+            bucket["low"] = min(bucket["low"], low)
+        points = list(buckets.values())  # rows were sorted, so bucket order is chronological
 
     return {"range": range_name, "multi_line": config["multi_line"], "points": points}
