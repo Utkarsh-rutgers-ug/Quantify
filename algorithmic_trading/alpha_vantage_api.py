@@ -42,7 +42,9 @@ def get_historical_data(
     if not api_key:
         raise AlphaVantageError("No Alpha Vantage API key configured.")
 
-    function = _FUNCTION_MAP.get(interval, "TIME_SERIES_DAILY_ADJUSTED")
+    if interval not in _FUNCTION_MAP or output_size not in ("compact", "full"):
+        raise AlphaVantageError("Unsupported historical interval or output size.")
+    function = _FUNCTION_MAP[interval]
 
     params = {
         "function": function,
@@ -51,15 +53,18 @@ def get_historical_data(
         "datatype": "json",
         "outputsize": output_size,
     }
-    r = requests.get(BASE_URL, params=params, timeout=30)
-    r.raise_for_status()
-    data = r.json()
+    try:
+        r = requests.get(BASE_URL, params=params, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except (requests.RequestException, ValueError):
+        # Transport exceptions may contain the request URL and API key.
+        raise AlphaVantageError("Historical price provider could not be reached or returned invalid data.") from None
 
     ts_key = _TS_KEY_MAP[function]
-    if ts_key not in data:
+    if not isinstance(data, dict) or ts_key not in data:
         # Common cases: bad symbol, rate limit ("Note"), or invalid key ("Information")
-        message = data.get("Note") or data.get("Information") or data.get("Error Message") or data
-        raise AlphaVantageError(f"Alpha Vantage error for {ticker}: {message}")
+        raise AlphaVantageError("Historical data unavailable. Check the symbol, API plan and provider limits.")
 
     df = pd.DataFrame.from_dict(data[ts_key], orient="index")
     df.index = pd.to_datetime(df.index)

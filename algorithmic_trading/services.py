@@ -7,27 +7,42 @@ Business logic for the paper-trading simulation:
   - equity curve + performance summary
   - wiring price history into risk_engine for per-position risk/signal output
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+import math
+from heapq import merge
+from itertools import groupby
+import re
 import pandas as pd
 from flask import current_app
 
 from models import (
-    db, User, Account, Trade, Position, HistoricalPrice, QuoteSample, WatchedTicker
+    db, User, Account, Trade, Position, HistoricalPrice, QuoteSample, WatchedTicker,
+    STARTING_BALANCE,
 )
-from alpha_vantage_api import get_historical_data, AlphaVantageError
+from alpha_vantage_api import get_historical_data
 from finnhub_api import get_quote, search_symbols
-from chart_builder import build_chart
+from chart_builder import build_chart, RANGE_CONFIG
 import risk_engine
-
-STARTING_BALANCE = 100_000.00
-
 
 # ---------------------------------------------------------------------------
 # Account / user setup
 # ---------------------------------------------------------------------------
 
 def create_user_with_account(name: str, email: str, starting_balance: float = STARTING_BALANCE) -> User:
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
+        raise ValueError("Name must contain 1–80 characters")
+    if not isinstance(email, str) or not 1 <= len(email.strip()) <= 120:
+        raise ValueError("Email must contain 1–120 characters")
+    if isinstance(starting_balance, bool):
+        raise ValueError("Starting balance must be a finite positive number")
+    try:
+        starting_balance = float(starting_balance)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("Starting balance must be a finite positive number") from None
+    if not math.isfinite(starting_balance) or starting_balance <= 0:
+        raise ValueError("Starting balance must be a finite positive number")
+    name, email = name.strip(), email.strip()
     user = User(name=name, email=email)
     db.session.add(user)
     db.session.flush()  # assign user.id without committing yet
@@ -50,9 +65,16 @@ def get_account(user_id: int) -> Account:
 # ---------------------------------------------------------------------------
 
 def upsert_prices(ticker: str, df: pd.DataFrame) -> int:
+    if df.empty:
+        return 0
+    # Fetch once instead of issuing one SELECT for every incoming daily row.
+    existing = {p.date: p for p in HistoricalPrice.query.filter(
+        HistoricalPrice.ticker == ticker,
+        HistoricalPrice.date >= df.index.min().date(),
+        HistoricalPrice.date <= df.index.max().date()).all()}
     inserted = 0
     for d, row in df.iterrows():
-        hp = HistoricalPrice.query.filter_by(ticker=ticker, date=d.date()).one_or_none()
+        hp = existing.get(d.date())
         if hp is None:
             hp = HistoricalPrice(
                 ticker=ticker,
@@ -64,6 +86,7 @@ def upsert_prices(ticker: str, df: pd.DataFrame) -> int:
                 volume=int(row["volume"]) if not pd.isna(row["volume"]) else 0,
             )
             db.session.add(hp)
+            existing[d.date()] = hp
             inserted += 1
         else:
             hp.open = float(row["open"])
@@ -197,17 +220,21 @@ def search_market_symbols(query: str) -> List[Dict]:
 
 
 def get_quote_chart(ticker: str, range_name: str) -> Dict:
+    if range_name not in RANGE_CONFIG:
+        raise ValueError("range must be one of: 24h, 1w, 1m, 1y, all")
     ticker = ticker.strip().upper()
     watch_ticker(ticker)
     db.session.commit()
-    rows = (
-        QuoteSample.query.filter_by(ticker=ticker)
-        .order_by(QuoteSample.timestamp.asc())
-        .all()
-    )
-    result = build_chart(rows, range_name)
+    query = QuoteSample.query.filter_by(ticker=ticker)
+    total = query.count()
+    stamp = datetime.utcnow()
+    lookback = RANGE_CONFIG[range_name]["lookback"]
+    if lookback is not None:
+        query = query.filter(QuoteSample.timestamp >= stamp - lookback)
+    rows = query.order_by(QuoteSample.timestamp.asc()).all()
+    result = build_chart(rows, range_name, now=stamp)
     result["ticker"] = ticker
-    result["sample_count"] = len(rows)
+    result["sample_count"] = total
     return result
 
 
@@ -222,25 +249,44 @@ def submit_trade(
     ticker: str,
     side: str,
     quantity: int,
-    price: Optional[float] = None,
     when: Optional[datetime] = None,
 ) -> Dict:
-    side = side.upper()
+    if type(user_id) is not int or not 0 < user_id <= 2_147_483_647:
+        raise ValueError("user_id must be a positive integer")
+    if type(quantity) is not int or not 0 < quantity <= 2_147_483_647:
+        raise ValueError("quantity must be a positive whole number within the supported range")
+    if not isinstance(ticker, str):
+        raise ValueError("ticker must be a symbol string")
+    ticker = ticker.strip().upper()
+    if not re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,9}", ticker):
+        raise ValueError("ticker must be 1–10 letters, digits, dots, or hyphens, starting with a letter")
+    if not isinstance(side, str):
+        raise ValueError("side must be BUY or SELL")
+    side = side.strip().upper()
     if side not in ("BUY", "SELL"):
         raise ValueError("side must be BUY or SELL")
-    if quantity <= 0:
-        raise ValueError("quantity must be positive")
 
     when = when or datetime.utcnow()
     account = get_account(user_id)
 
+    # Execution price always comes from server-held market data.
+    price = latest_close(ticker)
     if price is None:
-        price = latest_close(ticker)
-        if price is None:
-            price = fetch_and_store_quote(ticker)["price"]
-
-    price = float(price)
+        price = fetch_and_store_quote(ticker)["price"]
+    try:
+        price = float(price)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("Market price must be finite and greater than zero") from None
+    if not math.isfinite(price) or price <= 0:
+        raise ValueError("Market price must be finite and greater than zero")
+    if not math.isfinite(price * quantity):
+        raise ValueError("Trade value exceeds the supported range")
+    if not math.isfinite(account.cash_balance) or not math.isfinite(account.cash_balance + price * quantity):
+        raise ValueError("Account balance exceeds the supported range")
+    previous_cash = account.cash_balance
     position = Position.query.filter_by(user_id=user_id, ticker=ticker).one_or_none()
+    if side == "BUY" and (position.quantity if position else 0) + quantity > 2_147_483_647:
+        raise ValueError("Position quantity exceeds the supported range")
 
     realized_pnl = None
 
@@ -288,6 +334,17 @@ def submit_trade(
         realized_pnl=realized_pnl,
         timestamp=when,
     )
+    # Compare-and-set cash before flushing positions to reject an order whose
+    # observed balance changed while it was being prepared.
+    from sqlalchemy import update
+    with db.session.no_autoflush:
+        changed = db.session.execute(update(Account).where(
+            Account.id == account.id, Account.cash_balance == previous_cash
+        ).values(cash_balance=account.cash_balance).execution_options(synchronize_session=False))
+    if changed.rowcount != 1:
+        db.session.rollback()
+        raise ValueError("Account changed during this trade. Refresh and try again.")
+    db.session.expire(account, ["cash_balance"])
     db.session.add(trade)
     db.session.commit()
 
@@ -309,17 +366,17 @@ def get_positions(user_id: int) -> List[Dict]:
     for p in rows:
         if p.quantity == 0:
             continue
-        last_close = latest_close(p.ticker) or 0.0
-        market_value = p.quantity * last_close
-        unrealized_pl = (last_close - p.avg_cost) * p.quantity
+        last_close = latest_close(p.ticker)
+        market_value = p.quantity * last_close if last_close is not None else None
+        unrealized_pl = (last_close - p.avg_cost) * p.quantity if last_close is not None else None
         result.append(
             {
                 "ticker": p.ticker,
                 "quantity": p.quantity,
                 "avg_cost": round(p.avg_cost, 4),
-                "last_price": round(last_close, 4),
-                "market_value": round(market_value, 2),
-                "unrealized_pl": round(unrealized_pl, 2),
+                "last_price": round(last_close, 4) if last_close is not None else None,
+                "market_value": round(market_value, 2) if market_value is not None else None,
+                "unrealized_pl": round(unrealized_pl, 2) if unrealized_pl is not None else None,
             }
         )
     return result
@@ -328,14 +385,26 @@ def get_positions(user_id: int) -> List[Dict]:
 def get_portfolio_summary(user_id: int) -> Dict:
     account = get_account(user_id)
     positions = get_positions(user_id)
-    invested_value = sum(p["market_value"] for p in positions)
-    total_equity = account.cash_balance + invested_value
+    complete = all(p["market_value"] is not None for p in positions)
+    invested_value = sum(p["market_value"] for p in positions) if complete else None
+    total_equity = account.cash_balance + invested_value if complete else None
     return {
+        "starting_balance": initial_balance(user_id, account.cash_balance),
         "cash_balance": round(account.cash_balance, 2),
-        "invested_value": round(invested_value, 2),
-        "total_equity": round(total_equity, 2),
+        "invested_value": round(invested_value, 2) if complete else None,
+        "total_equity": round(total_equity, 2) if complete else None,
+        "valuation_complete": complete,
         "positions": positions,
     }
+
+
+def initial_balance(user_id, cash_balance):
+    """Infer initial cash from this account's ledger without loading trade objects."""
+    from sqlalchemy import case, func
+    net_spend = db.session.query(func.sum(case(
+        (Trade.side == "BUY", Trade.price * Trade.quantity),
+        else_=-Trade.price * Trade.quantity))).filter(Trade.user_id == user_id).scalar() or 0
+    return round(cash_balance + net_spend, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -370,46 +439,31 @@ def build_equity_curve(user_id: int, start: Optional[datetime] = None) -> pd.Dat
         .all()
     )
 
-    events = {}
-    for sample in samples:
-        events.setdefault(sample.timestamp, {"samples": [], "trades": []})[
-            "samples"
-        ].append(sample)
-    for trade in trades:
-        events.setdefault(trade.timestamp, {"samples": [], "trades": []})[
-            "trades"
-        ].append(trade)
-
+    # Both queries are chronological. Merge them in linear time without building
+    # and sorting a second dictionary of the entire quote history.
+    changes = merge(
+        ((row.timestamp, 0, row) for row in samples),
+        ((row.timestamp, 1, row) for row in trades),
+        key=lambda change: change[:2],
+    )
     running_cash = starting_cash
+    invested_value = 0.0
     quantities = {symbol: 0 for symbol in symbols}
     last_prices = {}
-    points = [
-        {
-            "timestamp": first_trade_at - timedelta(microseconds=1),
-            "equity": starting_cash,
-        }
-    ]
-
-    for timestamp in sorted(events):
-        event = events[timestamp]
-        for sample in event["samples"]:
-            last_prices[sample.ticker] = float(sample.price)
-
-        for trade in event["trades"]:
-            amount = float(trade.price) * trade.quantity
-            last_prices[trade.ticker] = float(trade.price)
-            if trade.side == "BUY":
+    points = [{"timestamp": first_trade_at - timedelta(microseconds=1), "equity": starting_cash}]
+    for timestamp, updates in groupby(changes, key=lambda change: change[0]):
+        # Each quote/trade is visited once. Samples precede trades at equal times.
+        for _, kind, row in updates:
+            price = float(row.price)
+            invested_value += quantities[row.ticker] * (price - last_prices.get(row.ticker, 0.0))
+            last_prices[row.ticker] = price
+            if kind == 1:
+                quantity = row.quantity if row.side == "BUY" else -row.quantity
+                amount = price * quantity
                 running_cash -= amount
-                quantities[trade.ticker] += trade.quantity
-            else:
-                running_cash += amount
-                quantities[trade.ticker] -= trade.quantity
-
-        equity = running_cash + sum(
-            quantities[symbol] * last_prices.get(symbol, 0.0)
-            for symbol in symbols
-        )
-        points.append({"timestamp": timestamp, "equity": equity})
+                quantities[row.ticker] += quantity
+                invested_value += amount
+        points.append({"timestamp": timestamp, "equity": running_cash + invested_value})
 
     curve = pd.DataFrame(points)
     if start is not None:
@@ -440,8 +494,13 @@ def performance_summary(curve: pd.DataFrame) -> Dict:
 def assess_ticker_risk(ticker: str) -> Dict:
     df = get_price_history(ticker)
     if df.empty:
+        from sqlalchemy import func
+        recent_dates = db.session.query(func.date(QuoteSample.timestamp)).filter(
+            QuoteSample.ticker == ticker.upper()).distinct().order_by(
+                func.date(QuoteSample.timestamp).desc()).limit(21).all()
+        cutoff = datetime.fromisoformat(str(recent_dates[-1][0])) if recent_dates else datetime.max
         samples = (
-            QuoteSample.query.filter_by(ticker=ticker.upper())
+            QuoteSample.query.filter(QuoteSample.ticker == ticker.upper(), QuoteSample.timestamp >= cutoff)
             .order_by(QuoteSample.timestamp.asc())
             .all()
         )

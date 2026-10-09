@@ -120,3 +120,21 @@ class QuoteSample(db.Model):
     __table_args__ = (
         Index("ix_quote_sample_ticker_timestamp", "ticker", "timestamp"),
     )
+
+
+class NewsArticle(db.Model):
+    """First-observed feed metadata, not full articles or investment signals."""
+
+    __tablename__ = "news_articles"
+    id = db.Column(db.Integer, primary_key=True)
+    identity = db.Column(db.String(64), nullable=False, unique=True)
+    source_id = db.Column(db.String(40), nullable=False, index=True)
+    source_name = db.Column(db.String(120), nullable=False)
+    feed_url = db.Column(db.Text, nullable=False)
+    url = db.Column(db.Text, nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    summary = db.Column(db.Text, nullable=False, default="")
+    published_at = db.Column(db.DateTime, nullable=True, index=True)
+    retrieved_at = db.Column(db.DateTime, nullable=False, index=True)
+    mrk_match = db.Column(db.String(24), nullable=True, index=True)
+    cramer_mention = db.Column(db.Boolean, nullable=False, default=False)

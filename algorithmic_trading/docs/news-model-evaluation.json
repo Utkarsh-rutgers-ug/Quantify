@@ -1,0 +1,118 @@
+{
+  "training_examples": 15219,
+  "validation_examples": 3352,
+  "validation_duplicates_removed": 765,
+  "abstained": 14,
+  "accuracy": 0.7622315035799523,
+  "macro_f1_classified": 0.6350958884581978,
+  "majority_baseline": 0.21927207637231502,
+  "per_class": [
+    {
+      "topic": "Analyst Update",
+      "support_classified": 69,
+      "f1": 0.594059405940594
+    },
+    {
+      "topic": "Fed | Central Banks",
+      "support_classified": 144,
+      "f1": 0.7491166077738516
+    },
+    {
+      "topic": "Company | Product News",
+      "support_classified": 735,
+      "f1": 0.8043899289864429
+    },
+    {
+      "topic": "Treasuries | Corporate Debt",
+      "support_classified": 48,
+      "f1": 0.2545454545454545
+    },
+    {
+      "topic": "Dividend",
+      "support_classified": 95,
+      "f1": 0.9787234042553191
+    },
+    {
+      "topic": "Earnings",
+      "support_classified": 241,
+      "f1": 0.9114470842332614
+    },
+    {
+      "topic": "Energy | Oil",
+      "support_classified": 104,
+      "f1": 0.6145251396648045
+    },
+    {
+      "topic": "Financials",
+      "support_classified": 151,
+      "f1": 0.8402777777777778
+    },
+    {
+      "topic": "Currencies",
+      "support_classified": 21,
+      "f1": 0.37037037037037035
+    },
+    {
+      "topic": "General News | Opinion",
+      "support_classified": 188,
+      "f1": 0.5879629629629629
+    },
+    {
+      "topic": "Gold | Metals | Materials",
+      "support_classified": 8,
+      "f1": 0.0
+    },
+    {
+      "topic": "IPO",
+      "support_classified": 12,
+      "f1": 0.0
+    },
+    {
+      "topic": "Legal | Regulation",
+      "support_classified": 99,
+      "f1": 0.7142857142857143
+    },
+    {
+      "topic": "M&A | Investments",
+      "support_classified": 110,
+      "f1": 0.6588235294117647
+    },
+    {
+      "topic": "Macro",
+      "support_classified": 262,
+      "f1": 0.6919104991394148
+    },
+    {
+      "topic": "Markets",
+      "support_classified": 106,
+      "f1": 0.7046632124352331
+    },
+    {
+      "topic": "Politics",
+      "support_classified": 188,
+      "f1": 0.8783068783068783
+    },
+    {
+      "topic": "Personnel Change",
+      "support_classified": 103,
+      "f1": 0.8494623655913979
+    },
+    {
+      "topic": "Stock Commentary",
+      "support_classified": 465,
+      "f1": 0.799625468164794
+    },
+    {
+      "topic": "Stock Movement",
+      "support_classified": 189,
+      "f1": 0.6994219653179191
+    }
+  ],
+  "vocabulary": 20000,
+  "trained_at": "2026-10-08T19:53:28.174608+00:00",
+  "dataset": "https://huggingface.co/datasets/zeroshot/twitter-financial-news-topic",
+  "dataset_license": "MIT per dataset card; underlying content rights require separate review for redistribution",
+  "train_sha256": "63b9ea8183728dd5ddc6a57289341556509ddc0a8d037616519319a316b54490",
+  "validation_sha256": "67396d6cd4a21c3755de783f20fb5842f12ae8edb9367eed5d2644dd85ca9243",
+  "limitations": "Topic classification only. Provider validation split is not chronological. Exact normalized duplicates removed; near-duplicate events may remain. Performance on current BBC/CNBC news is unmeasured. No return or trading accuracy claim."
+}
