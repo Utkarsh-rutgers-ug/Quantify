@@ -1,12 +1,19 @@
-# Quantify
+# Quantify: Trading & Portfolio Analytics
 
-Quantify is a local paper-trading application for studying how financial news
-relates to market behavior. It combines a simulated account, stored market data,
-a locally trained news classifier, and a local language model for briefings and
-portfolio questions.
+A Flask web app for virtual trading accounts with portfolio analytics.
 
-The application uses Flask, SQLite, pandas, and plain JavaScript. It does not
-connect to a broker or place real orders.
+## Features
+- Accounts, trades, positions, and watchlists with cash and position validation
+- Weighted-average cost basis, realized/unrealized P/L, and total equity
+- Scheduled Finnhub market-data collection with rate-aware ticker rotation
+- Multi-range historical price charts
+- Rule-based risk signals: concentration, cash exposure, unrealized loss
+
+## Tech stack
+Python, Flask, SQLite, REST APIs, JavaScript, HTML/CSS
+
+## Run locally
+(install, set FINNHUB_API_KEY, run command)
 
 ## Current functionality
 
