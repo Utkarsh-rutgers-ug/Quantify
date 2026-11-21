@@ -103,6 +103,35 @@ def live(evidence, stamp):
                 0<=stamp-int(datetime.fromisoformat(n["published_at"].replace("Z","+00:00")).timestamp())<=86400]
             step(c,"live",ticker,stamp,observed,price,price,move,relevant(ticker,titles),fresh,observed)
 
+def valued_history(c):
+    """Mark all sleeves at the latest known price at each decision cycle."""
+    from itertools import groupby
+    from collections import defaultdict
+    months = defaultdict(list)
+    live_values = {}
+    for mode in ("replay", "live"):
+        symbols = [r[0] for r in c.execute("select distinct ticker from decision where mode=?", (mode,))]
+        balances = dict.fromkeys(symbols, STARTING_CASH)
+        marks = {}
+        stream = c.execute("select * from decision where mode=? order by stamp,ticker", (mode,))
+        for stamp, group in groupby(stream, key=lambda r: r["stamp"]):
+            cycle = list(group)
+            for r in cycle:
+                ticker = r["ticker"]
+                if r["price"] is not None:
+                    marks[ticker] = r["price"]
+                balances[ticker] = r["cash"] + r["held"] * marks.get(ticker, 0) if not r["held"] or ticker in marks else None
+            equity = sum(balances.values()) if None not in balances.values() else None
+            for r in cycle:
+                if mode == "live":
+                    live_values[r["ticker"]] = equity
+                if r["fill"]:
+                    month = datetime.fromtimestamp(stamp, NY).strftime("%B %Y")
+                    months[month].append(dict(r, equity=equity, sleeve=balances[r["ticker"]]))
+    for entries in months.values():
+        entries.sort(key=lambda r: (-r["stamp"], r["ticker"]))
+    return months, live_values
+
 @panel.get("/quantitator")
 def monitor():
     with connection() as c:
@@ -110,8 +139,8 @@ def monitor():
         c.row_factory=sqlite3.Row
         rows=c.execute("select * from decision where mode='live' and stamp=(select max(stamp) from decision where mode='live') order by ticker").fetchall()
         totals=c.execute("select mode,count(*) as decisions,count(fill) as fills from decision group by mode").fetchall()
-        fills=c.execute("select * from decision where fill is not null order by stamp desc limit 30").fetchall()
+        months, live_values = valued_history(c)
         coverage=c.execute("select count(*) as n,count(distinct publisher) as publishers from headline").fetchone()
         bars=c.execute("select count(*),count(distinct ticker) from bar").fetchone()
-    return render_template("monitor.html",rows=rows,totals=totals,fills=fills,coverage=coverage,bars=bars,
+    return render_template("monitor.html",rows=rows,totals=totals,months=months,live_values=live_values,coverage=coverage,bars=bars,
         utc=lambda t:datetime.fromtimestamp(t,timezone.utc).strftime("%b %d %H:%M UTC"))
