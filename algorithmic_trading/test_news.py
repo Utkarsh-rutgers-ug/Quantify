@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 from datetime import datetime
 from app import create_app
 from models import db, NewsArticle
-from news import parse_feed, ingest_source, classify_mentions, fetch_feed, NewsError, MAX_BYTES
+from news import parse_feed, ingest_source, classify_mentions, fetch_feed, NewsError, MAX_BYTES, SOURCES
 
 RSS = b'''<rss version="2.0"><channel>
 <item><title>Jim Cramer discusses Merck &amp; Co.</title>
@@ -98,7 +98,7 @@ class NewsTests(unittest.TestCase):
             self.assertEqual(len(cramer), 1)
             self.assertIsNone(cramer[0]["expected_impact"])
             self.assertTrue(cramer[0]["published_at"].endswith("Z"))
-            self.assertEqual(len(client.get("/api/news/sources").json["sources"]), 2)
+            self.assertEqual(len(client.get("/api/news/sources").json["sources"]), len(SOURCES))
         for query in ["limit=0", "limit=101", "limit=bad", "before_id=-1", "ticker=AAPL", "source=unknown", "person=unknown"]:
             self.assertEqual(client.get("/api/news?" + query).status_code, 400)
 

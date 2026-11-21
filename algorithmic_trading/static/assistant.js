@@ -13,11 +13,11 @@
     const row = briefings.find(item => String(item.id) === select.value);
     evidence.replaceChildren();
     if (!row) {
-      status.textContent = 'Waiting for the first hourly collection.';
+      status.textContent = 'Waiting for the first five-minute collection.';
       report.textContent = 'Start Quantify with run.py, or keep worker.py running for scheduled collection.';
       return;
     }
-    status.textContent = `${row.status.replaceAll('_', ' ')} · collected ${time(row.started_at)}${row.stale ? ' · OLD DATA' : ''}`;
+    status.textContent = `${row.model} · ${row.status.replaceAll('_', ' ')} · collected ${time(row.started_at)}${row.stale ? ' · OLD DATA' : ''}`;
     report.textContent = row.report || 'Collecting sources and preparing the briefing…';
     const data = row.evidence;
     const note = document.createElement('p');

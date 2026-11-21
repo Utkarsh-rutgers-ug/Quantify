@@ -47,13 +47,16 @@ class AssistantTests(unittest.TestCase):
                 assistant.run_briefing(self.app)
         self.assertEqual(assistant.MarketBriefing.query.count(), 2)
 
-    def test_model_down_preserves_evidence(self):
-        with patch.object(assistant, 'collect_evidence', return_value={"news": ["saved"]}), \
-             patch.object(assistant, 'answer', side_effect=assistant.AssistantUnavailable("offline")):
+    def test_hourly_quantitator_briefing_without_qwen(self):
+        with patch.object(assistant, 'collect_evidence', return_value={"news": [{"classification": {"topic": "Product"}}]}), \
+             patch.object(assistant, 'answer', side_effect=AssertionError("background Qwen call")) as qwen:
             assistant.run_briefing(self.app)
         row = assistant.MarketBriefing.query.one()
-        self.assertEqual(row.status, "data_only")
-        self.assertEqual(json.loads(row.evidence_json)["news"], ["saved"])
+        qwen.assert_not_called()
+        self.assertEqual(row.model, "Quantitator")
+        self.assertEqual(row.status, "ready")
+        self.assertIn("Product: 1", row.report)
+        self.assertEqual(json.loads(row.evidence_json)["news"][0]["classification"]["topic"], "Product")
 
     def test_feed_failure_and_separate_classifier(self):
         db.session.add(NewsArticle(identity="1", source_id="test", source_name="Test",

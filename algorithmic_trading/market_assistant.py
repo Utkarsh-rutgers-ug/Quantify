@@ -13,6 +13,7 @@ from models import db, NewsArticle, User, Account, Position, Trade, QuoteSample,
 from news import SOURCES, ingest_source, serialize_article
 from news_model import classify
 import services
+import quantitator
 
 MODEL = os.getenv("QUANTIFY_CHAT_MODEL", "qwen3:8b")
 MODEL_LOCK = Lock()
@@ -30,6 +31,7 @@ a likely explanation. Every numeric quote claim must cite its [Qn] source.
 Write plain text without markdown stars. Include the evidence collection date.
 State missing coverage and the evidence's timestamps. Receipt time is not market
 time. A fresh retrieval may contain an old quote, especially outside trading hours.
+Quantitator computes the market evidence. You are its conversational interface.
 The custom forecasting model is not trained yet; do not claim its predictions.
 Topic annotations come from the separate Quantify classifier and can be wrong.
 For portfolio questions use only portfolio_context for the selected user. Cite
@@ -65,11 +67,11 @@ class AssistantUnavailable(Exception):
     pass
 
 
-def answer(messages, evidence):
+def answer(messages, evidence, instructions=None):
     if not MODEL_LOCK.acquire(blocking=False):
         raise AssistantUnavailable("The local model is busy. Try again shortly.")
     try:
-        context = {"role": "system", "content": SYSTEM + "\nEvidence JSON:\n" + json.dumps(evidence)}
+        context = {"role": "system", "content": (instructions or SYSTEM) + "\nEvidence JSON:\n" + json.dumps(evidence)}
         response = requests.post("http://127.0.0.1:11434/api/chat", json={
             "model": MODEL, "messages": [context] + messages,
             "stream": False, "think": False, "keep_alive": "5m",
@@ -112,7 +114,7 @@ def collect_evidence():
             db.session.rollback()
             quotes.append({"id": f"Q{index}", "ticker": ticker, "status": "unavailable"})
     rows = NewsArticle.query.filter(NewsArticle.retrieved_at >= collected - timedelta(hours=24)).order_by(
-        NewsArticle.retrieved_at.desc(), NewsArticle.id.desc()).limit(12).all()
+        NewsArticle.retrieved_at.desc(), NewsArticle.id.desc()).all()
     news = []
     for index, row in enumerate(rows, 1):
         article = serialize_article(row)
@@ -121,7 +123,7 @@ def collect_evidence():
             "published_at": article["published_at"], "retrieved_at": article["retrieved_at"],
             "classification": classify(article["title"])})
     return {"collected_at": iso(collected), "feeds": feeds, "quotes": quotes, "news": news,
-        "coverage": "Up to 12 recently collected BBC/CNBC headlines and summaries; not comprehensive company coverage.",
+        "coverage": "Headlines received from configured sources during the last 24 hours.",
         "watchlist_total": len(watched), "watchlist_limit": 25,
         "news_model": "quantify-news-nb-v1 (independent local classifier; no Qwen)",
         "forecast_model": "not trained", "missing_intervals_backfilled": False}
@@ -131,8 +133,8 @@ def run_briefing(app):
     """One persisted collection per UTC hour, even with multiple worker processes."""
     with app.app_context():
         stamp = now()
-        row = MarketBriefing(hour=stamp.replace(minute=0, second=0, microsecond=0),
-                             started_at=stamp, status="collecting", model=MODEL)
+        row = MarketBriefing(hour=stamp.replace(minute=stamp.minute // 5 * 5, second=0, microsecond=0),
+                             started_at=stamp, status="collecting", model=quantitator.NAME)
         db.session.add(row)
         try:
             db.session.commit()
@@ -143,17 +145,15 @@ def run_briefing(app):
         try:
             evidence = collect_evidence()
             row = db.session.get(MarketBriefing, row_id)
-            row.evidence_json = json.dumps(evidence)
+            saved_evidence = dict(evidence, news=evidence["news"][:12]) if "news" in evidence else evidence
+            row.evidence_json = json.dumps(saved_evidence)
             db.session.commit()  # preserve evidence even if generation is interrupted
-            try:
-                report = answer([{"role": "user", "content":
-                    "Write a market briefing under 250 words: observed moves, relevant news, "
-                    "possible implications, and gaps. Do not assign a headline to a stock without evidence."}], evidence)
-                status = "ready"
-            except AssistantUnavailable as exc:
-                report = str(exc) + "\nEvidence is saved below; no AI interpretation was generated."
-                status = "data_only"
-            row.report, row.status, row.finished_at = report, status, now()
+            if app.config.get("QUANTITATOR_LIVE"):
+                from paper_replay import live
+                live(evidence, int(now().replace(tzinfo=timezone.utc).timestamp()))
+            row.report = quantitator.briefing(evidence)
+            row.status = "ready"
+            row.finished_at = now()
             db.session.commit()
         except Exception:
             db.session.rollback()
@@ -215,7 +215,7 @@ def register(app):
     def briefings():
         rows = MarketBriefing.query.order_by(MarketBriefing.id.desc()).limit(24).all()
         return {"briefings": [serialize(row) for row in rows],
-            "schedule": "Hourly while run.py or worker.py is running; resumes on restart.", "model": MODEL}
+            "schedule": "Every five minutes while run.py or worker.py is running; resumes on restart.", "model": MODEL}
 
     @api.post("/api/assistant/chat")
     def chat():
@@ -243,6 +243,7 @@ def register(app):
         if row is None:
             return {"error": "No briefing evidence yet. Start the Quantify worker or run briefing-refresh."}, 409
         evidence = json.loads(row.evidence_json)
+        evidence["news"] = evidence.get("news", [])[:12]
         evidence["user_profile"] = {"username": user.name}
         evidence["portfolio_context"] = portfolio_context(user.id)
         evidence["answer_requested_at"] = iso(now())

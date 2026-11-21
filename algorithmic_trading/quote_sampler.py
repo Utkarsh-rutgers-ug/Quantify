@@ -40,22 +40,12 @@ def sample_watched_tickers(app):
 
 def _build_scheduler(app, scheduler_class):
     """Configure a scheduler without deciding how its process stays alive."""
-    interval_seconds = max(30, int(os.getenv("QUOTE_SAMPLE_INTERVAL_SECONDS", "30")))
+    interval_seconds = 300
+    app.config["QUANTITATOR_LIVE"] = True
     scheduler = scheduler_class(timezone="UTC")
-    scheduler.add_job(
-        sample_watched_tickers,
-        "interval",
-        seconds=interval_seconds,
-        args=[app],
-        id="finnhub_quote_sampler",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-        next_run_time=datetime.now(timezone.utc),
-    )
     from market_assistant import run_briefing
     scheduler.add_job(
-        run_briefing, "interval", hours=1, args=[app],
+        run_briefing, "interval", minutes=5, args=[app],
         id="market_briefing", replace_existing=True, max_instances=1,
         coalesce=True, misfire_grace_time=3600,
         next_run_time=datetime.now(timezone.utc),

@@ -25,6 +25,10 @@ SOURCES = {
         "domains": ("cnbc.com",),
     },
 }
+SOURCES.update({
+    "fed-releases": {"name": "Federal Reserve", "url": "https://www.federalreserve.gov/feeds/press_all.xml", "domains": ("federalreserve.gov",)},
+    "google-business": {"name": "Google News Business", "url": "https://news.google.com/rss/search?q=business+OR+markets+when:1d&hl=en-US&gl=US&ceid=US:en", "domains": ("news.google.com",)},
+})
 MAX_BYTES = 2_000_000
 MAX_ITEMS = 500
 
@@ -154,7 +158,7 @@ def parse_feed(payload, source_id):
         mrk, cramer = classify_mentions(title, summary)
         parsed.append(dict(
             identity=sha256((source_id + "\n" + url).encode()).hexdigest(),
-            source_id=source_id, source_name=source["name"], feed_url=source["url"],
+            source_id=source_id, source_name=(plain_text(field("source"), 120) or source["name"]) if source_id == "google-business" else source["name"], feed_url=source["url"],
             url=url, title=title, summary=summary, published_at=published_time(published),
             mrk_match=mrk, cramer_mention=cramer,
         ))

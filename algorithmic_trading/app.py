@@ -28,6 +28,10 @@ def create_app():
     register_commands(app)
     from event_study import register as register_event_study
     register_event_study(app)
+    from research_case import case
+    app.register_blueprint(case)
+    from paper_replay import panel
+    app.register_blueprint(panel)
     from market_assistant import register as register_market_assistant
     register_market_assistant(app)
 

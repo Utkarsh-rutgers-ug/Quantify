@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PTC event study · Quantify</title>
+<style>
+*{box-sizing:border-box}body{max-width:840px;margin:auto;padding:36px 5%;background:#101a21;color:#e7f0f3;font:16px/1.55 system-ui}a{color:#79ded0}h1{font-size:clamp(28px,5vw,44px);line-height:1.12}small,figcaption{color:#b5c9d1}figure{margin:20px 0}canvas{width:100%;height:240px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{padding:9px 4px;border-bottom:1px solid #40535b;text-align:right}th:first-child,td:first-child{text-align:left}input,button{padding:10px;font:inherit}input{width:min(100%,480px)}output{display:block;white-space:pre-wrap;margin-top:12px}
+</style><main>
+{% if live %}<a href="/">← Quantify dashboard</a>{% else %}<small>Quantify · Event research</small>{% endif %}
+<h1>PTC expands its federal software offerings</h1>
+<p>November 19, 2026 · 9:56 a.m. Eastern · {{event.classification.topic}}</p>
+<p>PTC announced an expansion of its FedRAMP offerings. Quantitator’s local news classifier assigned the topic above. The study starts at the wire publication minute.</p>
+<p><a href="{{event.source_url}}">PTC announcement</a> · <a href="{{event.wire}}">Wire record</a></p>
+<h2>The first trading hour</h2>
+<figure><canvas id="plot" width="760" height="240" aria-label="PTC and SPY percentage changes from the pre-announcement close"></canvas><figcaption>Minute closes relative to 9:55 a.m. Eastern. PTC in teal, SPY in gold. Gaps mark missing bars.</figcaption></figure>
+<table><thead><tr><th>Elapsed</th><th>PTC</th><th>SPY</th><th>Difference¹</th></tr></thead><tbody>
+{% for w in event.windows %}<tr><td>{{w.minutes}} min</td><td>{{'%+.3f'|format(w.PTC.pct)}}%</td><td>{{'%+.3f'|format(w.SPY.pct)}}%</td><td>{{'%+.3f'|format(w.excess_pp)}} pp</td></tr>{% endfor %}
+</tbody></table>
+<p>¹ PTC return minus SPY return, in percentage points. Missing intermediate prices prevent a reliable estimate of the first threshold crossing. Other news and market conditions could also have influenced prices.</p>
+<p>At 15 minutes, both had fallen. PTC fell less than SPY. By the end of the hour their returns differed by about 1.14 percentage points.</p>
+<details><summary>Inspect the prices</summary><p>Yahoo Finance one-minute closes, USD. Each timestamp marks the end of its minute. Baseline closes were PTC {{'%.4f'|format(event.windows[0].PTC.base)}} and SPY {{'%.4f'|format(event.windows[0].SPY.base)}}.</p><table><tr><th>End (UTC)</th><th>PTC ($)</th><th>SPY ($)</th></tr>{% for w in event.windows %}<tr><td>{{w.PTC.end[11:16]}}</td><td>{{'%.4f'|format(w.PTC.close)}}</td><td>{{'%.4f'|format(w.SPY.close)}}</td></tr>{% endfor %}</table></details>
+{% if live %}<h2>Ask Qwen about this event</h2><form><label for="q">Question</label><br><input id="q" required maxlength="2000" value="How did PTC compare with SPY after 15 minutes?"> <button>Ask Qwen</button></form><output aria-live="polite"></output>
+<script>document.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button'),out=document.querySelector('output');button.disabled=true;out.textContent='Reading event evidence…';try{const r=await fetch('/api/research/ptc/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:document.querySelector('#q').value})});const d=await r.json();out.textContent=d.answer||d.error}catch{out.textContent='Could not reach the local app.'}finally{button.disabled=false}};</script>{% endif %}
+</main><script>
+const series={{event.chart|tojson}},canvas=document.querySelector('#plot'),ctx=canvas.getContext('2d');
+const values=Object.values(series).flat().map(p=>p[1]).filter(v=>v!==null);
+const lo=Math.floor(Math.min(...values)*2)/2,hi=Math.ceil(Math.max(...values)*2)/2;
+const x=m=>56+(m+1)*675/61,y=v=>194-(v-lo)*160/(hi-lo);
+ctx.font='14px system-ui';ctx.fillStyle='#bdd1d7';
+for(let v=lo;v<=hi;v+=0.5){ctx.fillText(v+'%',2,y(v)+4);ctx.strokeStyle='#364650';ctx.beginPath();ctx.moveTo(54,y(v));ctx.lineTo(735,y(v));ctx.stroke()}
+for(const m of [0,15,30,45,60])ctx.fillText(m+'m',x(m)-12,222);
+for(const [ticker,color] of [['PTC','#79ded0'],['SPY','#f3bc65']]){ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;let prev=null;for(const [m,v] of series[ticker]){if(v===null){prev=null;continue}if(prev){ctx.beginPath();ctx.moveTo(...prev);ctx.lineTo(x(m),y(v));ctx.stroke()}ctx.fillRect(x(m)-1,y(v)-1,2,2);prev=[x(m),y(v)]}}
+</script></html>
